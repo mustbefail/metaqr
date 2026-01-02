@@ -1,0 +1,47 @@
+'use strict';
+
+const { QrMatrix } = require('./QrMatrix');
+const { setupPatterns } = require('./patterns');
+const { applyMask, findBestMask } = require('./mask');
+const { applyFormatInfo, applyVersionInfo } = require('./format');
+const { fillData } = require('./data');
+const { toSvg, toString, drawToCanvas } = require('./render');
+const { getMatrixSize } = require('../spec');
+
+/**
+ * Creates a complete QR matrix from encoded bits
+ * Facade pattern - provides simple interface for a complex subsystem
+ */
+const createQrMatrix = (bits, version, eccLevel, maskPattern = 'auto') => {
+  const size = getMatrixSize(version);
+  const matrix = new QrMatrix(size);
+
+  setupPatterns(matrix, version);
+  fillData(matrix, bits);
+
+  const mask =
+    maskPattern === 'auto'
+      ? findBestMask(matrix, applyFormatInfo, eccLevel)
+      : maskPattern;
+
+  applyMask(matrix, mask);
+
+  applyFormatInfo(matrix, eccLevel, mask);
+  applyVersionInfo(matrix, version);
+
+  return { matrix, mask };
+};
+
+module.exports = {
+  QrMatrix,
+  createQrMatrix,
+  setupPatterns,
+  applyMask,
+  findBestMask,
+  applyFormatInfo,
+  applyVersionInfo,
+  fillData,
+  toSvg,
+  toString,
+  drawToCanvas,
+};
