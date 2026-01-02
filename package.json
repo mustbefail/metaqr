@@ -17,12 +17,18 @@
   "author": "Viktor Kushnir <mustbefail@gmail.com>",
   "type": "commonjs",
   "main": "main.js",
+  "exports": {
+    ".": {
+      "import": "./main.mjs",
+      "require": "./main.js"
+    }
+  },
   "scripts": {
     "test": "node test/unit-tests.js",
     "lint": "eslint . --fix",
     "prettier": "prettier --write .",
-    "bundle": "npx esbuild example/generator.js --bundle --outfile=example/bundle.js",
-    "generate": "node main.js"
+    "build": "metarhia-build",
+    "generate": "node test/generate-qrs.js"
   },
   "dependencies": {
     "@types/node": "^25.0.3",
@@ -30,6 +36,7 @@
     "eslint": "^9.39.2",
     "eslint-config-metarhia": "^9.1.5",
     "jsqr": "^1.4.0",
+    "metarhia-build": "^0.0.0",
     "prettier": "^3.7.4",
     "qrcode": "^1.5.4",
     "typescript": "^5.9.3"

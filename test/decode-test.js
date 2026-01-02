@@ -1,5 +1,5 @@
 // test/decode-test.js
-const { encode } = require('../src/qrEncoder');
+const { encode } = require('../lib/qrEncoder');
 const jsQR = require('jsqr');
 const { createCanvas } = require('canvas');
 const fs = require('fs');

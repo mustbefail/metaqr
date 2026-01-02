@@ -1,0 +1,17 @@
+{
+  "order": [
+    "spec.js",
+    "matrix/data.js",
+    "matrix/format.js",
+    "matrix/mask.js",
+    "matrix/patterns.js",
+    "matrix/QrMatrix.js",
+    "matrix/render.js",
+    "matrix/index.js",
+    "BitBuffer.js",
+    "encoder.js",
+    "galois.js",
+    "reedsolomon.js",
+    "qrEncoder.js"
+  ]
+}
