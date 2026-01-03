@@ -5,6 +5,7 @@ import { encode } from '../metaqr.mjs';
 const form = document.querySelector('#form');
 const input = document.querySelector('#text-input');
 const eccSelect = document.querySelector('#ecc-select');
+const modeSelect = document.querySelector('#mode-select');
 const canvas = document.querySelector('#qr-canvas');
 const resultArea = document.querySelector('#result-area');
 
@@ -12,15 +13,20 @@ const infoVersion = document.querySelector('#info-version');
 const infoEcc = document.querySelector('#info-ecc');
 const infoMask = document.querySelector('#info-mask');
 const infoSize = document.querySelector('#info-size');
+const infoMode = document.querySelector('#info-mode');
+
+const errorContainer = document.querySelector('#error-text');
 
 const generateQR = () => {
   const text = input.value;
   const ecc = eccSelect.value;
+  const mode = modeSelect.value;
 
   if (!text) return;
 
   try {
-    const qr = encode(text, { ecc });
+    const qr = encode(text, { ecc, mode });
+    errorContainer.textContent = '';
 
     qr.toCanvas(canvas, {
       cellSize: 8,
@@ -37,10 +43,12 @@ const generateQR = () => {
     const size = qr.matrix.size;
     infoSize.textContent = `${size}x${size}`;
 
+    infoMode.textContent = mode === 'auto' ? '(auto)' : mode;
+
     resultArea.classList.add('active');
   } catch (error) {
     console.error(error);
-    alert('Error: ' + error.message);
+    errorContainer.textContent = error.message;
   }
 };
 

@@ -163,32 +163,6 @@ const VERSION_INFO = [
   0x27541, 0x28c69,
 ];
 
-const getNsym = (version, eccLevel) => CAPACITIES[version].ecc[eccLevel];
-
-const getCharCountSize = (version, mode) => {
-  if (mode === MODES.BYTE) {
-    return version < 10 ? 8 : 16;
-  }
-  throw new Error(`Mode ${mode} is not supported yet`);
-};
-
-const getDataCapacity = (version, eccLevel) => {
-  const spec = CAPACITIES[version];
-  if (!spec) throw new Error(`Version ${version} is out of range (1-40)`);
-  return spec.total - spec.ecc[eccLevel];
-};
-
-const getMatrixSize = (version) => (version - 1) * 4 + 21;
-
-const getAlignmentPatternPositions = (version) =>
-  ALIGNMENT_POSITIONS[version] || [];
-
-const getFormatInfo = (eccLevel, maskPattern) =>
-  FORMAT_INFO[(eccLevel << 3) | maskPattern];
-
-const getVersionInfo = (version) =>
-  version >= 7 ? VERSION_INFO[version - 7] : null;
-
 // Block structure for each version and ECC level
 // Format: { blocks: [{count, dataWords, eccWords}...] }
 const BLOCK_INFO = {
@@ -818,12 +792,6 @@ const BLOCK_INFO = {
   },
 };
 
-const getBlockInfo = (version, eccLevel) => {
-  const info = BLOCK_INFO[version];
-  if (!info) throw new Error(`Block info not available for version ${version}`);
-  return info[eccLevel] || [];
-};
-
 export {
   ECC_LEVELS,
   MODES,
@@ -832,6 +800,54 @@ export {
   FORMAT_INFO,
   VERSION_INFO,
   BLOCK_INFO,
+};
+
+// utils.js
+
+const getBlockInfo = (version, eccLevel) => {
+  const info = BLOCK_INFO[version];
+  if (!info) throw new Error(`Block info not available for version ${version}`);
+  return info[eccLevel] || [];
+};
+
+const getNsym = (version, eccLevel) => CAPACITIES[version].ecc[eccLevel];
+
+const getCharCountSize = (version, mode) => {
+  if (mode === MODES.BYTE) {
+    return version < 10 ? 8 : 16;
+  }
+  if (mode === MODES.NUMERIC) {
+    if (version <= 9) return 10;
+    if (version <= 26) return 12;
+    return 14;
+  }
+  if (mode === MODES.ALPHANUMERIC) {
+    if (version <= 9) return 9;
+    if (version <= 26) return 11;
+    return 13;
+  }
+  throw new Error(`Mode ${mode} is not supported yet`);
+};
+
+const getDataCapacity = (version, eccLevel) => {
+  const spec = CAPACITIES[version];
+  if (!spec) throw new Error(`Version ${version} is out of range (1-40)`);
+  return spec.total - spec.ecc[eccLevel];
+};
+
+const getMatrixSize = (version) => (version - 1) * 4 + 21;
+
+const getAlignmentPatternPositions = (version) =>
+  ALIGNMENT_POSITIONS[version] || [];
+
+const getFormatInfo = (eccLevel, maskPattern) =>
+  FORMAT_INFO[(eccLevel << 3) | maskPattern];
+
+const getVersionInfo = (version) =>
+  version >= 7 ? VERSION_INFO[version - 7] : null;
+
+export {
+  getBlockInfo,
   getNsym,
   getCharCountSize,
   getDataCapacity,
@@ -839,7 +855,6 @@ export {
   getAlignmentPatternPositions,
   getFormatInfo,
   getVersionInfo,
-  getBlockInfo,
 };
 
 // matrix/data.js
@@ -1470,21 +1485,30 @@ export { BitBuffer };
 
 // encoder.js
 
+const ALPHANUMERICCHARSET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
+
 class QrEncoder {
   #text = '';
   #eccLevel = 0;
   #version = 1;
   #utf8Data = new Uint8Array();
+  #mode = null;
 
-  constructor({ text, eccLevel, version }) {
+  constructor({ text, eccLevel, version, mode }) {
     this.#text = text;
     this.#eccLevel = eccLevel;
     this.#utf8Data = new TextEncoder().encode(this.#text);
+    this.#mode = mode || null;
     this.#version = version || this.#versionAutoSelect();
+
   }
 
   get version() {
     return this.#version;
+  }
+
+  get mode() {
+    return this.#mode || this.#getMode();
   }
 
   encode() {
@@ -1511,6 +1535,18 @@ class QrEncoder {
     return bitBuffer.bits;
   }
 
+  #getMode() {
+    if (this.#mode !== null) return this.#mode;
+
+    const text = this.#text;
+    const numericRe = /^[0-9]+$/;
+    const alnumRe = new RegExp(`^[${ALPHANUMERICCHARSET.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}]+$`);
+
+    if (numericRe.test(text)) return MODES.NUMERIC;
+    if (alnumRe.test(text)) return MODES.ALPHANUMERIC;
+    return MODES.BYTE;
+  }
+
   #splitIntoBlocks(dataBytes, blockInfo) {
     const dataBlocks = [];
     const eccBlocks = [];
@@ -1534,6 +1570,7 @@ class QrEncoder {
     return { dataBlocks, eccBlocks };
   }
 
+
   #interleaveBlocks(blocks) {
     const result = [];
     const maxLength = Math.max(...blocks.map((b) => b.length));
@@ -1552,30 +1589,39 @@ class QrEncoder {
   #prepareDataBytes() {
     const bitBuffer = new BitBuffer();
     const targetCapacity = getDataCapacity(this.#version, this.#eccLevel);
-    const charCountBits = getCharCountSize(this.#version, MODES.BYTE);
 
-    bitBuffer.append(MODES.BYTE, 4);
-    bitBuffer.append(this.#utf8Data.length, charCountBits);
+    const mode = this.#getMode();
+    const charCountBits = getCharCountSize(this.#version, mode);
+    this.#validateTextForMode(mode);
 
-    for (const char of this.#utf8Data) {
-      bitBuffer.append(char, 8);
+    // Mode indicator
+    bitBuffer.append(mode, 4);
+    // Character count
+    bitBuffer.append(this.#text.length, charCountBits);
+
+    // Data bits
+    if (mode === MODES.NUMERIC) {
+      this.#encodeNumeric(bitBuffer);
+    } else if (mode === MODES.ALPHANUMERIC) {
+      this.#encodeAlphanumeric(bitBuffer);
+    } else {
+      this.#encodeByte(bitBuffer);
     }
 
-    // Byte terminator
+    // Terminator
     const bitsLeft = targetCapacity * 8 - bitBuffer.length();
     const terminatorLength = Math.min(4, bitsLeft);
     if (terminatorLength > 0) {
       bitBuffer.append(0, terminatorLength);
     }
 
-    // Byte alignment padding
+    // Byte alignment
     if (bitBuffer.length() % 8 !== 0) {
       bitBuffer.append(0, 8 - (bitBuffer.length() % 8));
     }
 
+    // Padding bytes 236/17
     const currentBytes = Math.ceil(bitBuffer.length() / 8);
-
-    // Padding bytes
     let paddingByte = 236;
     for (let i = 0; i < targetCapacity - currentBytes; i++) {
       bitBuffer.append(paddingByte, 8);
@@ -1585,14 +1631,126 @@ class QrEncoder {
     return bitBuffer.toUint8Array();
   }
 
-  #versionAutoSelect() {
-    const modeBits = 4;
-    const versionsCount = 40;
-    for (let v = 1; v <= versionsCount; v++) {
-      const overheadBits = modeBits + getCharCountSize(v, MODES.BYTE);
-      const totalBitsNeeded = overheadBits + this.#utf8Data.length * 8;
-      const totalBytesNeeded = Math.ceil(totalBitsNeeded / 8);
+  #getAlphanumericValue(char) {
+    const idx = ALPHANUMERICCHARSET.indexOf(char);
+    if (idx === -1) {
+      throw new Error(`Character "${char}" is not valid in ALPHANUMERIC mode`);
+    }
+    return idx;
+  }
 
+  #getDataBitsLengthForVersion(mode) {
+    const length = this.#text.length;
+
+    if (mode === MODES.NUMERIC) {
+      const groupsOf3 = Math.floor(length / 3);
+      const remaining = length % 3;
+      let bits = groupsOf3 * 10;
+      if (remaining === 1) bits += 4;
+      else if (remaining === 2) bits += 7;
+      return bits;
+    }
+
+    if (mode === MODES.ALPHANUMERIC) {
+      const pairs = Math.floor(length / 2);
+      const remaining = length % 2;
+      let bits = pairs * 11;
+      if (remaining === 1) bits += 6;
+      return bits;
+    }
+
+    if (mode === MODES.BYTE) {
+      return this.#utf8Data.length * 8;
+    }
+
+    throw new Error(`Unsupported mode: ${mode}`);
+  }
+
+  #validateTextForMode(mode) {
+    const text = this.#text;
+
+    if (mode === MODES.NUMERIC) {
+      if (!/^[0-9]+$/.test(text)) {
+        throw new Error('Numeric mode supports only digits 0-9');
+      }
+    } else if (mode === MODES.ALPHANUMERIC) {
+      const re = new RegExp(
+        `^[${ALPHANUMERICCHARSET.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}]+$`
+      );
+      if (!re.test(text)) {
+        throw new Error(
+          'Alphanumeric mode supports only: 0-9, A-Z, space, $%*+-./:'
+        );
+      }
+    }
+  }
+
+  #encodeNumeric(bitBuffer) {
+    const text = this.#text;
+    let i = 0;
+
+    while (i < text.length) {
+      const remaining = text.length - i;
+
+      if (remaining >= 3) {
+        const group = text.slice(i, i + 3);
+        bitBuffer.append(parseInt(group, 10), 10);
+        i += 3;
+      } else if (remaining === 2) {
+        const group = text.slice(i, i + 2);
+        bitBuffer.append(parseInt(group, 10), 7);
+        i += 2;
+      } else {
+        const group = text.slice(i, i + 1);
+        bitBuffer.append(parseInt(group, 10), 4);
+        i += 1;
+      }
+    }
+  }
+
+  #encodeAlphanumeric(bitBuffer) {
+    const text = this.#text;
+    let i = 0;
+
+    while (i < text.length) {
+      const remaining = text.length - i;
+
+      if (remaining >= 2) {
+        const v1 = this.#getAlphanumericValue(text[i]);
+        const v2 = this.#getAlphanumericValue(text[i + 1]);
+        const value = v1 * 45 + v2;
+        bitBuffer.append(value, 11);
+        i += 2;
+      } else {
+        const v = this.#getAlphanumericValue(text[i]);
+        bitBuffer.append(v, 6);
+        i += 1;
+      }
+    }
+  }
+
+  #encodeByte(bitBuffer) {
+    for (const char of this.#utf8Data) {
+      bitBuffer.append(char, 8);
+    }
+  }
+
+  #versionAutoSelect() {
+    const versionsCount = 40;
+    const mode = this.#getMode();
+    const modeBits = 4;
+
+    for (let v = 1; v <= versionsCount; v++) {
+      const charCountBits = getCharCountSize(v, mode);
+      let totalBitsNeeded = modeBits + charCountBits;
+
+      if (mode === MODES.BYTE) {
+        totalBitsNeeded += this.#utf8Data.length * 8;
+      } else {
+        totalBitsNeeded += this.#getDataBitsLengthForVersion(mode);
+      }
+
+      const totalBytesNeeded = Math.ceil(totalBitsNeeded / 8);
       if (totalBytesNeeded <= getDataCapacity(v, this.#eccLevel)) {
         return v;
       }
@@ -1696,6 +1854,7 @@ const encode = (text, options = {}) => {
   const config = {
     ecc: 'M',
     maskPattern: 'auto',
+    mode: 'auto',
     ...options,
   };
 
@@ -1704,10 +1863,24 @@ const encode = (text, options = {}) => {
     throw new Error(`Invalid ECC level: "${config.ecc}". Use L, M, Q, or H.`);
   }
 
+  let forcedMode = null;
+  if (config.mode && config.mode !== 'auto') {
+    const m = config.mode.toLowerCase();
+    if (m === 'numeric') forcedMode = MODES.NUMERIC;
+    else if (m === 'alphanumeric') forcedMode = MODES.ALPHANUMERIC;
+    else if (m === 'byte') forcedMode = MODES.BYTE;
+    else {
+      throw new Error(
+        `Invalid mode: "${config.mode}". Use auto, numeric, alphanumeric, or byte.`
+      );
+    }
+  }
+
   const encoder = new QrEncoder({
     text,
     eccLevel,
     version: config.version,
+    mode: forcedMode,
   });
 
   const bits = encoder.encode();
@@ -1724,7 +1897,7 @@ const encode = (text, options = {}) => {
     version: encoder.version,
     eccLevel: config.ecc.toUpperCase(),
     maskPattern: mask,
-
+    mode: encoder.mode,
     toSvg: (options = {}) => {
       const { moduleSize = 10, margin = 4 } = options;
       return toSvg(matrix, moduleSize, margin);

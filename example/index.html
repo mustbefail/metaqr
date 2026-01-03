@@ -11,6 +11,7 @@
       --card-bg: #ffffff;
       --text-color: #1f2937;
       --border-color: #e5e7eb;
+      --error-color: #e53e3e;
     }
 
     body {
@@ -143,6 +144,18 @@
       color: var(--text-color);
     }
 
+    .errors {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .error-text {
+      color: var(--error-color);
+      font-weight: 600;
+    }
+
     @keyframes fadeIn {
       from {
         opacity: 0;
@@ -181,10 +194,23 @@
       </select>
     </div>
 
+    <label class="field">
+      <span class="field-label">Mode</span>
+      <select id="mode-select">
+        <option value="auto">Auto</option>
+        <option value="numeric">Numeric</option>
+        <option value="alphanumeric">Alphanumeric</option>
+        <option value="byte">Byte</option>
+      </select>
+    </label>
+
     <button type="submit">Generate QR Code</button>
   </form>
 
   <div class="result-area" id="result-area">
+    <div class="errors">
+      <div id="error-text" class="error-text"></div>
+    </div>
     <canvas id="qr-canvas"></canvas>
 
     <div class="info-box">
@@ -204,6 +230,10 @@
         <span class="info-label">Size:</span>
         <span class="info-value" id="info-size">-</span>
       </div>
+    <div class="info-row">
+      <span>Mode:</span>
+      <span id="info-mode"></span>
+    </div>
     </div>
   </div>
 </div>
