@@ -1,5 +1,5 @@
 // undefined
-// Version 1.0.0 metaqr
+// Version 1.0.0 metaqr MIT LicenseCopyright (c) 2017-2025 Metarhia contributors (full list in AUTHORS file)Permission is hereby granted, free of charge, to any person obtaining a copyof this software and associated documentation files (the "Software"), to dealin the Software without restriction, including without limitation the rightsto use, copy, modify, merge, publish, distribute, sublicense, and/or sellcopies of the Software, and to permit persons to whom the Software isfurnished to do so, subject to the following conditions:The above copyright notice and this permission notice shall be included in allcopies or substantial portions of the Software.THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS ORIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THEAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHERLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THESOFTWARE.
 
 // spec.js
 
@@ -189,21 +189,6 @@ const getFormatInfo = (eccLevel, maskPattern) =>
 const getVersionInfo = (version) =>
   version >= 7 ? VERSION_INFO[version - 7] : null;
 
-export {
-  ECC_LEVELS,
-  MODES,
-  CAPACITIES,
-  ALIGNMENT_POSITIONS,
-  FORMAT_INFO,
-  VERSION_INFO,
-  getNsym,
-  getCharCountSize,
-  getDataCapacity,
-  getMatrixSize,
-  getAlignmentPatternPositions,
-  getFormatInfo,
-  getVersionInfo,
-};
 // Block structure for each version and ECC level
 // Format: { blocks: [{count, dataWords, eccWords}...] }
 const BLOCK_INFO = {
@@ -839,6 +824,24 @@ const getBlockInfo = (version, eccLevel) => {
   return info[eccLevel] || [];
 };
 
+export {
+  ECC_LEVELS,
+  MODES,
+  CAPACITIES,
+  ALIGNMENT_POSITIONS,
+  FORMAT_INFO,
+  VERSION_INFO,
+  BLOCK_INFO,
+  getNsym,
+  getCharCountSize,
+  getDataCapacity,
+  getMatrixSize,
+  getAlignmentPatternPositions,
+  getFormatInfo,
+  getVersionInfo,
+  getBlockInfo,
+};
+
 // matrix/data.js
 
 /**
@@ -1315,26 +1318,28 @@ export { QrMatrix };
  */
 const toSvg = (matrix, moduleSize = 10, quietZone = 4) => {
   const qz = quietZone * moduleSize;
-  const totalSize = matrix.size * moduleSize + qz * 2;
+  const size = matrix.size;
+  const totalSize = size * moduleSize + qz * 2;
 
-  const rects = [];
-  for (let y = 0; y < matrix.size; y++) {
-    for (let x = 0; x < matrix.size; x++) {
+  let d = '';
+
+  for (let y = 0; y < size; y++) {
+    const py = qz + y * moduleSize;
+    for (let x = 0; x < size; x++) {
       if (matrix.get(x, y) === 1) {
         const px = qz + x * moduleSize;
-        const py = qz + y * moduleSize;
-        rects.push(
-          `<rect x="${px}" y="${py}" width="${moduleSize}" height="${moduleSize}"/>`,
-        );
+        const x2 = px + moduleSize;
+        const y2 = py + moduleSize;
+        d += `M${px} ${py}H${x2}V${y2}H${px}Z`;
       }
     }
   }
 
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalSize}" width="${totalSize}" height="${totalSize}">`,
-    `<rect width="100%" height="100%" fill="white"/>`,
-    `<g fill="black">${rects.join('')}</g>`,
-    '</svg>',
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalSize}" shape-rendering="crispEdges">`,
+    `<rect width="100%" height="100%" fill="#ffffff"/>`,
+    `<path d="${d}" fill="#000000"/>`,
+    `</svg>`,
   ].join('');
 };
 
