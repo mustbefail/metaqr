@@ -1,6 +1,7 @@
 {
   "order": [
     "spec.js",
+    "utils.js",
     "matrix/data.js",
     "matrix/format.js",
     "matrix/mask.js",
