@@ -10,9 +10,9 @@
     "matrix/render.js",
     "matrix/index.js",
     "BitBuffer.js",
-    "encoder.js",
+    "QrEncoder.js",
     "galois.js",
     "reedsolomon.js",
-    "qrEncoder.js"
+    "index.js"
   ]
 }

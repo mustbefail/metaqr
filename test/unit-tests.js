@@ -1,17 +1,22 @@
 'use strict';
 
 const assert = require('assert');
-const { QrEncoder } = require('../lib/encoder');
+const { QrEncoder } = require('../lib/QrEncoder');
 const { calculateECC } = require('../lib/reedsolomon');
 const { QrMatrix } = require('../lib/matrix/QrMatrix');
 const { setupPatterns } = require('../lib/matrix/patterns');
 const { fillData } = require('../lib/matrix/data');
 const { applyMask } = require('../lib/matrix/mask');
-const { encode } = require('../lib/qrEncoder');
-const { ECC_LEVELS, MODES, getDataCapacity, getCharCountSize } = require('../lib/spec');
+const { encode } = require('../lib');
+const {
+  ECC_LEVELS,
+  MODES,
+  getDataCapacity,
+} = require('../lib/spec');
 
 // Test utilities
-const logTestGroup = (name) => console.log(`\n${'='.repeat(60)}\n${name}\n${'='.repeat(60)}`);
+const logTestGroup = (name) =>
+  console.log(`\n${'='.repeat(60)}\n${name}\n${'='.repeat(60)}`);
 const logTest = (name) => console.log(`\n✓ ${name}`);
 
 // ============================================================================
@@ -39,16 +44,16 @@ logTestGroup('Test Case 1: QrEncoder prepareDataBytes');
   }
 
   // First 4 bits should be BYTE mode (0100)
-  const modeBits = (bytes[0] >> 4) & 0x0F;
+  const modeBits = (bytes[0] >> 4) & 0x0f;
   assert.strictEqual(modeBits, MODES.BYTE, 'Mode should be BYTE (4)');
 
   // Next 8 bits should be length (3 for "Hi!")
-  const lengthBits = ((bytes[0] & 0x0F) << 4) | (bytes[1] >> 4);
+  const lengthBits = ((bytes[0] & 0x0f) << 4) | (bytes[1] >> 4);
   assert.strictEqual(lengthBits, 3, 'Length should be 3');
 
   // Check that data contains expected characters
-  const h = ((bytes[1] & 0x0F) << 4) | (bytes[2] >> 4);
-  const i = ((bytes[2] & 0x0F) << 4) | (bytes[3] >> 4);
+  const h = ((bytes[1] & 0x0f) << 4) | (bytes[2] >> 4);
+  const i = ((bytes[2] & 0x0f) << 4) | (bytes[3] >> 4);
   assert.strictEqual(h, 72, 'First character should be H (72)');
   assert.strictEqual(i, 105, 'Second character should be i (105)');
 
@@ -77,7 +82,11 @@ logTestGroup('Test Case 1: QrEncoder prepareDataBytes');
   // encode() returns total codewords (data + ECC)
   // Version 1: 26 bytes total (16 data + 10 ECC for M level)
   const dataCapacity = getDataCapacity(1, eccLevel);
-  assert.strictEqual(bytes.length, 26, 'Version 1 should have 26 total codewords');
+  assert.strictEqual(
+    bytes.length,
+    26,
+    'Version 1 should have 26 total codewords',
+  );
 
   // Check for padding bytes (236, 17 alternating pattern) in the first 16 bytes (data portion)
   // After mode (4 bits) + length (8 bits) + data (8 bits) + terminator (4 bits) + alignment (4 bits) = 28 bits = 3.5 bytes
@@ -109,10 +118,20 @@ logTestGroup('Test Case 1: QrEncoder prepareDataBytes');
   // L has more data capacity than H (19 vs 9 bytes)
   // Total bits should reflect total codewords (data + ECC)
   // Version 1: 26 bytes total = 208 bits
-  assert.strictEqual(bitsL.length, 208, 'Version 1 should produce 208 bits total');
-  assert.strictEqual(bitsH.length, 208, 'Version 1 should produce 208 bits total');
+  assert.strictEqual(
+    bitsL.length,
+    208,
+    'Version 1 should produce 208 bits total',
+  );
+  assert.strictEqual(
+    bitsH.length,
+    208,
+    'Version 1 should produce 208 bits total',
+  );
 
-  logTest('Different ECC levels produce same total bit count but different data/ECC split');
+  logTest(
+    'Different ECC levels produce same total bit count but different data/ECC split',
+  );
 })();
 
 // ============================================================================
@@ -123,8 +142,8 @@ logTestGroup('Test Case 2: calculateECC error correction');
 // Test 2.1: Known test vector
 (() => {
   const testData = new Uint8Array([
-    0x40, 0x53, 0x13, 0x23, 0x33, 0x43, 0x50, 0xec,
-    0x11, 0xec, 0x11, 0xec, 0x11, 0xec, 0x11, 0xec
+    0x40, 0x53, 0x13, 0x23, 0x33, 0x43, 0x50, 0xec, 0x11, 0xec, 0x11, 0xec,
+    0x11, 0xec, 0x11, 0xec,
   ]);
 
   const ecc = calculateECC(testData, 10);
@@ -132,7 +151,7 @@ logTestGroup('Test Case 2: calculateECC error correction');
   assert.strictEqual(ecc.length, 10, 'Should generate 10 ECC bytes');
 
   // ECC values should be non-zero (with high probability)
-  const nonZeroCount = Array.from(ecc).filter(b => b !== 0).length;
+  const nonZeroCount = Array.from(ecc).filter((b) => b !== 0).length;
   assert.ok(nonZeroCount > 0, 'ECC should contain non-zero bytes');
 
   logTest('ECC byte count matches requested symbol count');
@@ -159,7 +178,7 @@ logTestGroup('Test Case 2: calculateECC error correction');
 
 // Test 2.3: ECC calculation is deterministic
 (() => {
-  const data = new Uint8Array([0xAA, 0xBB, 0xCC, 0xDD]);
+  const data = new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd]);
 
   const ecc1 = calculateECC(data, 5);
   const ecc2 = calculateECC(data, 5);
@@ -183,16 +202,40 @@ logTestGroup('Test Case 3: setupPatterns placement');
   setupPatterns(matrix, version);
 
   // Check top-left finder pattern (should have black center at 3,3)
-  assert.strictEqual(matrix.get(3, 3), 1, 'Top-left finder center should be black');
-  assert.strictEqual(matrix.isReserved(3, 3), true, 'Finder pattern should be reserved');
+  assert.strictEqual(
+    matrix.get(3, 3),
+    1,
+    'Top-left finder center should be black',
+  );
+  assert.strictEqual(
+    matrix.isReserved(3, 3),
+    true,
+    'Finder pattern should be reserved',
+  );
 
   // Check top-right finder pattern (center at size-4, 3)
-  assert.strictEqual(matrix.get(size - 4, 3), 1, 'Top-right finder center should be black');
-  assert.strictEqual(matrix.isReserved(size - 4, 3), true, 'Top-right finder should be reserved');
+  assert.strictEqual(
+    matrix.get(size - 4, 3),
+    1,
+    'Top-right finder center should be black',
+  );
+  assert.strictEqual(
+    matrix.isReserved(size - 4, 3),
+    true,
+    'Top-right finder should be reserved',
+  );
 
   // Check bottom-left finder pattern (center at 3, size-4)
-  assert.strictEqual(matrix.get(3, size - 4), 1, 'Bottom-left finder center should be black');
-  assert.strictEqual(matrix.isReserved(3, size - 4), true, 'Bottom-left finder should be reserved');
+  assert.strictEqual(
+    matrix.get(3, size - 4),
+    1,
+    'Bottom-left finder center should be black',
+  );
+  assert.strictEqual(
+    matrix.isReserved(3, size - 4),
+    true,
+    'Bottom-left finder should be reserved',
+  );
 
   logTest('Finder patterns placed at three corners');
 })();
@@ -217,7 +260,11 @@ logTestGroup('Test Case 3: setupPatterns placement');
 
   // Check dark module (at 8, 4*version + 9)
   const darkModuleY = 4 * version + 9;
-  assert.strictEqual(matrix.get(8, darkModuleY), 1, 'Dark module should be present');
+  assert.strictEqual(
+    matrix.get(8, darkModuleY),
+    1,
+    'Dark module should be present',
+  );
 
   logTest('Timing patterns placed correctly with alternating pattern');
   logTest('Dark module placed at correct position');
@@ -232,10 +279,26 @@ logTestGroup('Test Case 3: setupPatterns placement');
   setupPatterns(matrix, version);
 
   // Check format info areas are reserved
-  assert.strictEqual(matrix.isReserved(8, 0), true, 'Format info at (8,0) should be reserved');
-  assert.strictEqual(matrix.isReserved(0, 8), true, 'Format info at (0,8) should be reserved');
-  assert.strictEqual(matrix.isReserved(8, size - 1), true, 'Format info near bottom-left should be reserved');
-  assert.strictEqual(matrix.isReserved(size - 1, 8), true, 'Format info near top-right should be reserved');
+  assert.strictEqual(
+    matrix.isReserved(8, 0),
+    true,
+    'Format info at (8,0) should be reserved',
+  );
+  assert.strictEqual(
+    matrix.isReserved(0, 8),
+    true,
+    'Format info at (0,8) should be reserved',
+  );
+  assert.strictEqual(
+    matrix.isReserved(8, size - 1),
+    true,
+    'Format info near bottom-left should be reserved',
+  );
+  assert.strictEqual(
+    matrix.isReserved(size - 1, 8),
+    true,
+    'Format info near top-right should be reserved',
+  );
 
   logTest('Format information areas are reserved');
 })();
@@ -250,12 +313,28 @@ logTestGroup('Test Case 3: setupPatterns placement');
 
   // Version 7 has alignment pattern positions at [6, 22, 38]
   // Check alignment pattern at (22, 22)
-  assert.strictEqual(matrix.get(22, 22), 1, 'Alignment pattern center at (22,22) should be black');
-  assert.strictEqual(matrix.isReserved(22, 22), true, 'Alignment pattern should be reserved');
+  assert.strictEqual(
+    matrix.get(22, 22),
+    1,
+    'Alignment pattern center at (22,22) should be black',
+  );
+  assert.strictEqual(
+    matrix.isReserved(22, 22),
+    true,
+    'Alignment pattern should be reserved',
+  );
 
   // Check version info areas for version 7+
-  assert.strictEqual(matrix.isReserved(0, size - 11), true, 'Version info should be reserved');
-  assert.strictEqual(matrix.isReserved(size - 11, 0), true, 'Version info should be reserved');
+  assert.strictEqual(
+    matrix.isReserved(0, size - 11),
+    true,
+    'Version info should be reserved',
+  );
+  assert.strictEqual(
+    matrix.isReserved(size - 11, 0),
+    true,
+    'Version info should be reserved',
+  );
 
   logTest('Alignment patterns placed for version 7+');
   logTest('Version information areas reserved for version 7+');
@@ -311,9 +390,21 @@ logTestGroup('Test Case 4: fillData and applyMask');
   fillData(matrix, allOnes);
 
   // Reserved areas should not change
-  assert.strictEqual(matrix.get(3, 3), originalFinderValue, 'Finder pattern should not be overwritten');
-  assert.strictEqual(matrix.get(8, 6), originalTimingValue, 'Timing pattern should not be overwritten');
-  assert.strictEqual(matrix.isReserved(3, 3), true, 'Finder should remain reserved');
+  assert.strictEqual(
+    matrix.get(3, 3),
+    originalFinderValue,
+    'Finder pattern should not be overwritten',
+  );
+  assert.strictEqual(
+    matrix.get(8, 6),
+    originalTimingValue,
+    'Timing pattern should not be overwritten',
+  );
+  assert.strictEqual(
+    matrix.isReserved(3, 3),
+    true,
+    'Finder should remain reserved',
+  );
 
   logTest('fillData respects reserved areas (patterns not overwritten)');
 })();
@@ -336,7 +427,11 @@ logTestGroup('Test Case 4: fillData and applyMask');
   applyMask(matrix, 0);
 
   // Reserved areas should not be affected by mask
-  assert.strictEqual(matrix.get(3, 3), reservedValue, 'Reserved areas should not be masked');
+  assert.strictEqual(
+    matrix.get(3, 3),
+    reservedValue,
+    'Reserved areas should not be masked',
+  );
 
   logTest('applyMask does not modify reserved areas');
 })();
@@ -375,7 +470,10 @@ logTestGroup('Test Case 4: fillData and applyMask');
     if (foundDifference) break;
   }
 
-  assert.ok(foundDifference, 'Different masks should produce different patterns');
+  assert.ok(
+    foundDifference,
+    'Different masks should produce different patterns',
+  );
 
   logTest('Different mask patterns produce different results');
 })();
@@ -392,14 +490,25 @@ logTestGroup('Test Case 5: End-to-end QR generation');
 
   assert.ok(result.matrix, 'Should return a matrix');
   assert.ok(result.version >= 1, 'Should have a valid version');
-  assert.ok(result.maskPattern >= 0 && result.maskPattern < 8, 'Should have valid mask pattern');
+  assert.ok(
+    result.maskPattern >= 0 && result.maskPattern < 8,
+    'Should have valid mask pattern',
+  );
 
   const matrix = result.matrix;
 
   // Check finder patterns are present
   assert.strictEqual(matrix.get(3, 3), 1, 'Top-left finder should be present');
-  assert.strictEqual(matrix.get(matrix.size - 4, 3), 1, 'Top-right finder should be present');
-  assert.strictEqual(matrix.get(3, matrix.size - 4), 1, 'Bottom-left finder should be present');
+  assert.strictEqual(
+    matrix.get(matrix.size - 4, 3),
+    1,
+    'Top-right finder should be present',
+  );
+  assert.strictEqual(
+    matrix.get(3, matrix.size - 4),
+    1,
+    'Bottom-left finder should be present',
+  );
 
   logTest('End-to-end encode produces complete matrix');
   logTest('Matrix contains finder patterns');
@@ -411,7 +520,11 @@ logTestGroup('Test Case 5: End-to-end QR generation');
   const result = encode(text, { ecc: 'L', version: 1 });
 
   const expectedSize = 21; // Version 1 = 21x21
-  assert.strictEqual(result.matrix.size, expectedSize, `Version 1 should produce ${expectedSize}x${expectedSize} matrix`);
+  assert.strictEqual(
+    result.matrix.size,
+    expectedSize,
+    `Version 1 should produce ${expectedSize}x${expectedSize} matrix`,
+  );
   assert.strictEqual(result.version, 1, 'Version should be 1');
 
   logTest('Matrix size matches QR version specification');
@@ -469,7 +582,10 @@ logTestGroup('Test Case 5: End-to-end QR generation');
     if (foundDifference) break;
   }
 
-  assert.ok(foundDifference, 'Different text should produce different QR codes');
+  assert.ok(
+    foundDifference,
+    'Different text should produce different QR codes',
+  );
 
   logTest('Different input text produces different QR codes');
 })();

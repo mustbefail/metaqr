@@ -1,243 +1,244 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MetaQR Generator</title>
-  <style>
-    :root {
-      --primary-color: #3b82f6;
-      --bg-color: #f3f4f6;
-      --card-bg: #ffffff;
-      --text-color: #1f2937;
-      --border-color: #e5e7eb;
-      --error-color: #e53e3e;
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-      Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-      background-color: var(--bg-color);
-      color: var(--text-color);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-      margin: 0;
-      padding: 20px;
-    }
-
-    .container {
-      background-color: var(--card-bg);
-      padding: 2rem;
-      border-radius: 12px;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-      width: 100%;
-      max-width: 480px;
-      text-align: center;
-    }
-
-    h1 {
-      margin-top: 0;
-      color: var(--primary-color);
-      font-size: 1.8rem;
-    }
-
-    .input-group {
-      margin-bottom: 1.5rem;
-      text-align: left;
-    }
-
-    label {
-      display: block;
-      margin-bottom: 0.5rem;
-      font-weight: 500;
-      font-size: 0.9rem;
-    }
-
-    input[type='text'],
-    select {
-      width: 100%;
-      padding: 0.75rem;
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      font-size: 1rem;
-      box-sizing: border-box;
-      transition: border-color 0.2s;
-    }
-
-    input[type='text']:focus,
-    select:focus {
-      outline: none;
-      border-color: var(--primary-color);
-    }
-
-    button {
-      background-color: var(--primary-color);
-      color: white;
-      border: none;
-      padding: 0.75rem 1.5rem;
-      border-radius: 6px;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-      width: 100%;
-      transition: background-color 0.2s;
-    }
-
-    button:hover {
-      background-color: #2563eb;
-    }
-
-    .result-area {
-      margin-top: 2rem;
-      display: none; /* Hidden by default */
-      flex-direction: column;
-      align-items: center;
-      animation: fadeIn 0.5s ease-in-out;
-    }
-
-    .result-area.active {
-      display: flex;
-    }
-
-    canvas {
-      max-width: 100%;
-      height: auto;
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    }
-
-    .info-box {
-      margin-top: 1.5rem;
-      background-color: #f8fafc;
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      padding: 1rem;
-      width: 100%;
-      text-align: left;
-      font-size: 0.9rem;
-      box-sizing: border-box;
-    }
-
-    .info-row {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 0.5rem;
-      padding-bottom: 0.5rem;
-      border-bottom: 1px dashed var(--border-color);
-    }
-
-    .info-row:last-child {
-      margin-bottom: 0;
-      padding-bottom: 0;
-      border-bottom: none;
-    }
-
-    .info-label {
-      color: #6b7280;
-    }
-
-    .info-value {
-      font-weight: 600;
-      color: var(--text-color);
-    }
-
-    .errors {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      margin-bottom: 1rem;
-    }
-
-    .error-text {
-      color: var(--error-color);
-      font-weight: 600;
-    }
-
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-        transform: translateY(10px);
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MetaQR Generator</title>
+    <style>
+      :root {
+        --primary-color: #3b82f6;
+        --bg-color: #f3f4f6;
+        --card-bg: #ffffff;
+        --text-color: #1f2937;
+        --border-color: #e5e7eb;
+        --error-color: #e53e3e;
       }
-      to {
-        opacity: 1;
-        transform: translateY(0);
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
+          Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+        padding: 20px;
       }
-    }
-  </style>
-</head>
-<body>
-<div class="container">
-  <h1>MetaQR Generator</h1>
-  <form id="form">
-    <div class="input-group">
-      <label for="text-input">Content</label>
-      <input
-        type="text"
-        id="text-input"
-        name="text"
-        placeholder="Enter text or URL"
-        value="https://metarhia.com"
-        autocomplete="off"
-      />
-    </div>
 
-    <div class="input-group">
-      <label for="ecc-select">Error Correction Level</label>
-      <select id="ecc-select">
-        <option value="L">Low (7%)</option>
-        <option value="M" selected>Medium (15%)</option>
-        <option value="Q">Quartile (25%)</option>
-        <option value="H">High (30%)</option>
-      </select>
-    </div>
+      .container {
+        background-color: var(--card-bg);
+        padding: 2rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        width: 100%;
+        max-width: 480px;
+        text-align: center;
+      }
 
-    <label class="field">
-      <span class="field-label">Mode</span>
-      <select id="mode-select">
-        <option value="auto">Auto</option>
-        <option value="numeric">Numeric</option>
-        <option value="alphanumeric">Alphanumeric</option>
-        <option value="byte">Byte</option>
-      </select>
-    </label>
+      h1 {
+        margin-top: 0;
+        color: var(--primary-color);
+        font-size: 1.8rem;
+      }
 
-    <button type="submit">Generate QR Code</button>
-  </form>
+      .input-group {
+        margin-bottom: 1.5rem;
+        text-align: left;
+      }
 
-  <div class="result-area" id="result-area">
-    <div class="errors">
-      <div id="error-text" class="error-text"></div>
-    </div>
-    <canvas id="qr-canvas"></canvas>
+      label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        font-size: 0.9rem;
+      }
 
-    <div class="info-box">
-      <div class="info-row">
-        <span class="info-label">Version:</span>
-        <span class="info-value" id="info-version">-</span>
+      input[type='text'],
+      select {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        font-size: 1rem;
+        box-sizing: border-box;
+        transition: border-color 0.2s;
+      }
+
+      input[type='text']:focus,
+      select:focus {
+        outline: none;
+        border-color: var(--primary-color);
+      }
+
+      button {
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 6px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        width: 100%;
+        transition: background-color 0.2s;
+      }
+
+      button:hover {
+        background-color: #2563eb;
+      }
+
+      .result-area {
+        margin-top: 2rem;
+        display: none; /* Hidden by default */
+        flex-direction: column;
+        align-items: center;
+        animation: fadeIn 0.5s ease-in-out;
+      }
+
+      .result-area.active {
+        display: flex;
+      }
+
+      canvas {
+        max-width: 100%;
+        height: auto;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      }
+
+      .info-box {
+        margin-top: 1.5rem;
+        background-color: #f8fafc;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 1rem;
+        width: 100%;
+        text-align: left;
+        font-size: 0.9rem;
+        box-sizing: border-box;
+      }
+
+      .info-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.5rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px dashed var(--border-color);
+      }
+
+      .info-row:last-child {
+        margin-bottom: 0;
+        padding-bottom: 0;
+        border-bottom: none;
+      }
+
+      .info-label {
+        color: #6b7280;
+      }
+
+      .info-value {
+        font-weight: 600;
+        color: var(--text-color);
+      }
+
+      .errors {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin-bottom: 1rem;
+      }
+
+      .error-text {
+        color: var(--error-color);
+        font-weight: 600;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>MetaQR Generator</h1>
+      <form id="form">
+        <div class="input-group">
+          <label for="text-input">Content</label>
+          <input
+            type="text"
+            id="text-input"
+            name="text"
+            placeholder="Enter text or URL"
+            value="https://metarhia.com"
+            autocomplete="off"
+          />
+        </div>
+
+        <div class="input-group">
+          <label for="ecc-select">Error Correction Level</label>
+          <select id="ecc-select">
+            <option value="L">Low (7%)</option>
+            <option value="M" selected>Medium (15%)</option>
+            <option value="Q">Quartile (25%)</option>
+            <option value="H">High (30%)</option>
+          </select>
+        </div>
+
+        <label class="field">
+          <span class="field-label">Mode</span>
+          <select id="mode-select">
+            <option value="auto">Auto</option>
+            <option value="numeric">Numeric</option>
+            <option value="alphanumeric">Alphanumeric</option>
+            <option value="byte">Byte</option>
+          </select>
+        </label>
+
+        <button type="submit">Generate QR Code</button>
+      </form>
+
+      <div class="result-area" id="result-area">
+        <div class="errors">
+          <div id="error-text" class="error-text"></div>
+        </div>
+        <canvas id="qr-canvas"></canvas>
+
+        <div class="info-box">
+          <div class="info-row">
+            <span class="info-label">Version:</span>
+            <span class="info-value" id="info-version">-</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">ECC Level:</span>
+            <span class="info-value" id="info-ecc">-</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Mask Pattern:</span>
+            <span class="info-value" id="info-mask">-</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Size:</span>
+            <span class="info-value" id="info-size">-</span>
+          </div>
+          <div class="info-row">
+            <span>Mode:</span>
+            <span id="info-mode"></span>
+          </div>
+        </div>
       </div>
-      <div class="info-row">
-        <span class="info-label">ECC Level:</span>
-        <span class="info-value" id="info-ecc">-</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Mask Pattern:</span>
-        <span class="info-value" id="info-mask">-</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Size:</span>
-        <span class="info-value" id="info-size">-</span>
-      </div>
-    <div class="info-row">
-      <span>Mode:</span>
-      <span id="info-mode"></span>
     </div>
-    </div>
-  </div>
-</div>
 
-<script src="generator.js" type="module"></script>
-</body>
+    <script src="generator.js" type="module"></script>
+  </body>
 </html>

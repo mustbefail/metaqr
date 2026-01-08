@@ -1135,6 +1135,17 @@ export {
 // matrix/patterns.js
 
 /**
+ * Helper to fill rectangle
+ */
+const fillRect = (matrix, x, y, width, height, value, reserved) => {
+  for (let dy = 0; dy < height; dy++) {
+    for (let dx = 0; dx < width; dx++) {
+      matrix.set(x + dx, y + dy, value, reserved);
+    }
+  }
+};
+
+/**
  * Places a finder pattern at a given position
  */
 const placeFinderPattern = (matrix, originX, originY) => {
@@ -1154,9 +1165,11 @@ const placeFinderPattern = (matrix, originX, originY) => {
 /**
  * Places alignment pattern centered at given position
  *
- * IMPORTANT: Cannot decide "place/not place" based on matrix.isReserved(centerX, centerY),
+ * IMPORTANT: Cannot decide "place/not place" based on
+ * matrix.isReserved(centerX, centerY),
  * because timing/format/other reserved areas may mark the center as reserved.
- * According to the standard, we only skip 3 corners that overlap with finder patterns.
+ * According to the standard, we only skip 3 corners that overlap with
+ * finder patterns.
  */
 const placeAlignmentPattern = (matrix, centerX, centerY) => {
   const size = matrix.size;
@@ -1169,7 +1182,9 @@ const placeAlignmentPattern = (matrix, centerX, centerY) => {
     overlapsTopLeftFinder ||
     overlapsTopRightFinder ||
     overlapsBottomLeftFinder
-  ) { return; }
+  ) {
+    return;
+  }
 
   // black 5x5
   fillRect(matrix, centerX - 2, centerY - 2, 5, 5, 1, true);
@@ -1213,8 +1228,12 @@ const reserveInfoAreas = (matrix, version) => {
 
   // Format info near the bottom-left and top-right finders
   for (let i = 0; i < 8; i++) {
-    if (!matrix.isReserved(8, size - 1 - i)) { matrix.set(8, size - 1 - i, 0, true); }
-    if (!matrix.isReserved(size - 1 - i, 8)) { matrix.set(size - 1 - i, 8, 0, true); }
+    if (!matrix.isReserved(8, size - 1 - i)) {
+      matrix.set(8, size - 1 - i, 0, true);
+    }
+    if (!matrix.isReserved(size - 1 - i, 8)) {
+      matrix.set(size - 1 - i, 8, 0, true);
+    }
   }
 
   // Version info (versions 7+)
@@ -1246,16 +1265,6 @@ const setupPatterns = (matrix, version) => {
   reserveInfoAreas(matrix, version);
 };
 
-/**
- * Helper to fill rectangle
- */
-const fillRect = (matrix, x, y, width, height, value, reserved) => {
-  for (let dy = 0; dy < height; dy++) {
-    for (let dx = 0; dx < width; dx++) {
-      matrix.set(x + dx, y + dy, value, reserved);
-    }
-  }
-};
 
 export {
   setupPatterns,
@@ -1483,7 +1492,7 @@ class BitBuffer {
 
 export { BitBuffer };
 
-// encoder.js
+// QrEncoder.js
 
 const ALPHANUMERICCHARSET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
 
@@ -1500,7 +1509,6 @@ class QrEncoder {
     this.#utf8Data = new TextEncoder().encode(this.#text);
     this.#mode = mode || null;
     this.#version = version || this.#versionAutoSelect();
-
   }
 
   get version() {
@@ -1540,7 +1548,9 @@ class QrEncoder {
 
     const text = this.#text;
     const numericRe = /^[0-9]+$/;
-    const alnumRe = new RegExp(`^[${ALPHANUMERICCHARSET.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}]+$`);
+    const alnumRe = new RegExp(
+      `^[${ALPHANUMERICCHARSET.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}]+$`,
+    );
 
     if (numericRe.test(text)) return MODES.NUMERIC;
     if (alnumRe.test(text)) return MODES.ALPHANUMERIC;
@@ -1569,7 +1579,6 @@ class QrEncoder {
 
     return { dataBlocks, eccBlocks };
   }
-
 
   #interleaveBlocks(blocks) {
     const result = [];
@@ -1675,11 +1684,11 @@ class QrEncoder {
       }
     } else if (mode === MODES.ALPHANUMERIC) {
       const re = new RegExp(
-        `^[${ALPHANUMERICCHARSET.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}]+$`
+        `^[${ALPHANUMERICCHARSET.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}]+$`,
       );
       if (!re.test(text)) {
         throw new Error(
-          'Alphanumeric mode supports only: 0-9, A-Z, space, $%*+-./:'
+          'Alphanumeric mode supports only: 0-9, A-Z, space, $%*+-./:',
         );
       }
     }
@@ -1845,7 +1854,7 @@ const polyMul = (p1, p2) => {
 
 export { calculateECC };
 
-// qrEncoder.js
+// index.js
 
 /**
  * Public API for QR Code generation
@@ -1860,18 +1869,24 @@ const encode = (text, options = {}) => {
 
   const eccLevel = ECC_LEVELS[config.ecc.toUpperCase()];
   if (eccLevel === undefined) {
-    throw new Error(`Invalid ECC level: "${config.ecc}". Use L, M, Q, or H.`);
+    throw new TypeError(
+      `Invalid ECC level: "${config.ecc}". Use L, M, Q, or H.`,
+    );
   }
 
   let forcedMode = null;
   if (config.mode && config.mode !== 'auto') {
     const m = config.mode.toLowerCase();
-    if (m === 'numeric') forcedMode = MODES.NUMERIC;
-    else if (m === 'alphanumeric') forcedMode = MODES.ALPHANUMERIC;
-    else if (m === 'byte') forcedMode = MODES.BYTE;
-    else {
-      throw new Error(
-        `Invalid mode: "${config.mode}". Use auto, numeric, alphanumeric, or byte.`
+        if (m === 'numeric') {
+          forcedMode = MODES.NUMERIC;
+        } else if (m === 'alphanumeric') {
+          forcedMode = MODES.ALPHANUMERIC;
+        } else if (m === 'byte') {
+          forcedMode = MODES.BYTE;
+        } else {
+      throw new TypeError(
+        `Invalid mode: "${config.mode}".
+         Use auto, numeric, alphanumeric, or byte.`,
       );
     }
   }

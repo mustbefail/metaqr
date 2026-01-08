@@ -1,23 +1,21 @@
-const { encode } = require('../lib/qrEncoder');
+'use strict';
+
+const { encode } = require('../lib');
 const QRCode = require('qrcode');
 const fs = require('fs');
 
-const qr = encode('12345',
-  {
-    ecc: 'M',
-    version: 1,
-    maskPattern: 0,
-    mode: 'byte'
-  }
-);
+const qr = encode('12345', {
+  ecc: 'M',
+  version: 1,
+  maskPattern: 0,
+  mode: 'byte',
+});
 
-try{
+try {
   fs.writeFileSync('qr.svg', qr.toSvg());
-}
-catch (err) {
+} catch (err) {
   console.error('Error writing QR code:', err);
 }
-
 
 const segments = [{ data: '12345', mode: 'byte' }];
 
