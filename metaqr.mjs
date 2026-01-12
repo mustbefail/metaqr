@@ -8,8 +8,15 @@
 
 /**
  * QR Code Error Correction Levels
- * Values match the standard bit representation in the Format Information.
+ *
+ * These values (1, 0, 3, 2) are not arbitrary. They correspond to the
+ * 2-bit indicator used in the Format Information field of the QR Code.
+ * - L (Low): 7% recovery, indicator 01 (binary) -> 1
+ * - M (Medium): 15% recovery, indicator 00 (binary) -> 0
+ * - Q (Quartile): 25% recovery, indicator 11 (binary) -> 3
+ * - H (High): 30% recovery, indicator 10 (binary) -> 2
  */
+
 const ECC_LEVELS = {
   L: 1, // Low (7%)
   M: 0, // Medium (15%)
@@ -19,6 +26,12 @@ const ECC_LEVELS = {
 
 /**
  * QR Code Encoding Modes
+ *
+ * These 4-bit indicators are placed at the very beginning of the data stream
+ * to tell the decoder how to interpret the following bits.
+ * - NUMERIC: Only digits 0-9. Most efficient (10 bits per 3 digits).
+ * - ALPHANUMERIC: 0-9, A-Z, and some symbols. (11 bits per 2 chars).
+ * - BYTE: Raw 8-bit bytes (ISO-8859-1 or UTF-8). Least efficient but universal.
  */
 const MODES = {
   NUMERIC: 0b0001,
@@ -28,8 +41,14 @@ const MODES = {
 
 /**
  * Full Capacity table for Versions 1-40
- * total: Total number of codewords (bytes)
- * ecc: Number of ECC codewords for levels [L, M, Q, H] (mapped to 1, 0, 3, 2)
+ *
+ * This table defines the storage capacity and structure for every QR version.
+ * - total: The total number of codewords (bytes) the matrix can hold.
+ * - ecc: The number of codewords reserved for Error Correction for each level.
+ *
+ * The remaining space (total - ecc) is what is available for user data.
+ * This is "hardcoded" because these are physical limits determined by the
+ * matrix size (21x21, 25x25, etc.) minus the function patterns.
  */
 const CAPACITIES = {
   1: { total: 26, ecc: { 1: 7, 0: 10, 3: 13, 2: 17 } },
@@ -74,7 +93,17 @@ const CAPACITIES = {
   40: { total: 3706, ecc: { 1: 750, 0: 1372, 3: 2040, 2: 2430 } },
 };
 
-// Alignment pattern positions for all versions (1-40)
+/**
+ * Alignment pattern positions for all versions (1-40)
+ *
+ * Alignment patterns are small 5x5 structures
+ * used to correct improved distortion
+ * in larger QR codes (curved surfaces, perspective skew).
+ *
+ * The standard defines specific coordinates for the center of these patterns.
+ * As the version increases, more patterns are added in a grid-like fashion
+ * to ensure the scanner can always find a nearby reference point.
+ */
 const ALIGNMENT_POSITIONS = {
   1: [],
   2: [6, 18],
@@ -118,7 +147,17 @@ const ALIGNMENT_POSITIONS = {
   40: [6, 30, 58, 86, 114, 142, 170],
 };
 
-// Format info lookup table (ECC + mask -> 15-bit BCH encoded value)
+/**
+ * Format info lookup table (ECC + mask -> 15-bit BCH encoded value)
+ *
+ * Why pre-calculated?
+ * The Format Information string is a critical 15-bit sequence that tells the
+ * scanner the ECC level and Mask Pattern used.
+ * It is protected by BCH error correction.
+ * Since there are only 4 ECC levels * 8 Masks = 32 combinations,
+ * it is much faster and safer to pre-calculate these values
+ * than to implement the BCH encoding logic at runtime.
+ */
 const FORMAT_INFO = [
   0x5412,
   0x5125,
@@ -154,7 +193,16 @@ const FORMAT_INFO = [
   0x2bed, // Q 0-7
 ];
 
-// Version info for versions 7-40 (18-bit BCH encoded)
+/**
+ * Version info for versions 7-40 (18-bit BCH encoded)
+ *
+ * Versions 1-6 are small enough that the scanner can determine the version
+ * just by counting modules. For Version 7 and larger, two extra blocks of
+ * information (6x3) are added to explicitly state the version number.
+ * Like Format Info, these are protected by BCH codes
+ * and are pre-calculated here.
+ */
+
 const VERSION_INFO = [
   0x07c94, 0x085bc, 0x09a99, 0x0a4d3, 0x0bbf6, 0x0c762, 0x0d847, 0x0e60d,
   0x0f928, 0x10b78, 0x1145d, 0x12a17, 0x13532, 0x149a6, 0x15683, 0x168c9,
@@ -163,8 +211,22 @@ const VERSION_INFO = [
   0x27541, 0x28c69,
 ];
 
-// Block structure for each version and ECC level
-// Format: { blocks: [{count, dataWords, eccWords}...] }
+/**
+ * Block structure for each version and ECC level
+ * Format: { blocks: [{count, dataWords, eccWords}...] }
+ *
+ * Reed-Solomon error correction operates on finite fields (GF(2^8)), which
+ * limits the message block size to 255 bytes. Large QR codes contain much more
+ * data than this (up to ~3KB).
+ *
+ * Therefore, data must be split into multiple smaller "RS Blocks". Each block
+ * is error-corrected independently, and then they are interleaved (mixed)
+ * to better resist burst errors (like a stain covering a spot on the code).
+ *
+ * This table defines exactly how to split the data for every Version/ECC combo.
+ * e.g., "Split into 2 blocks of 15 bytes and 3 blocks of 16 bytes".
+ */
+
 const BLOCK_INFO = {
   1: {
     0: [{ count: 1, dataWords: 16, eccWords: 10 }], // M
@@ -861,32 +923,43 @@ export {
 
 /**
  * Fills data bits into the matrix using a zigzag pattern
+ * Starts from bottom-right, moves upwards in 2-column wide strips,
+ * then downwards, skipping reserved areas (finder patterns, timing lines).
+ *
+ * @param {QrMatrix} matrix - The matrix to fill
+ *                            (must have static patterns placed).
+ * @param {Uint8Array} bits - The data and ECC bits to write (as 0s and 1s).
  */
+
+const TIMING_COLUMN = 6;
+const DATA_COLUMNS_COUNT = 2;
+
 const fillData = (matrix, bits) => {
   const size = matrix.size;
   let bitIndex = 0;
-  let x = size - 1;
-  let upward = true;
+  let rightCol = size - 1;
+  let movingUp = true;
 
-  while (x >= 0) {
-    // skip timing pattern column
-    if (x === 6) x--;
+  while (rightCol > 0) {
+    if (rightCol === TIMING_COLUMN) rightCol--;
 
-    for (let i = 0; i < size; i++) {
-      const y = upward ? size - 1 - i : i;
+    const leftCol = rightCol - 1;
 
-      for (let col = 0; col < 2; col++) {
-        const currentX = x - col;
-        if (matrix.isReserved(currentX, y)) continue;
+    for (let rowStep = 0; rowStep < size; rowStep++) {
+      const row = movingUp ? size - 1 - rowStep : rowStep;
+      const cols = [rightCol, leftCol];
+
+      for (const col of cols) {
+        if (matrix.isReserved(col, row)) continue;
 
         if (bitIndex < bits.length) {
-          matrix.set(currentX, y, bits[bitIndex++]);
+          matrix.set(col, row, bits[bitIndex++]);
         }
       }
     }
 
-    x -= 2;
-    upward = !upward;
+    rightCol -= DATA_COLUMNS_COUNT;
+    movingUp = !movingUp;
   }
 };
 
@@ -952,7 +1025,7 @@ export {
  */
 const MASK_FUNCTIONS = [
   (i, j) => (i + j) % 2 === 0,
-  (i, _) => i % 2 === 0,
+  (i) => i % 2 === 0,
   (i, j) => j % 3 === 0,
   (i, j) => (i + j) % 3 === 0,
   (i, j) => (Math.floor(i / 2) + Math.floor(j / 3)) % 2 === 0,
@@ -977,14 +1050,6 @@ const applyMask = (matrix, pattern) => {
   }
 };
 
-/**
- * Calculates penalty score for a masked matrix (ISO 18004 Section 8.8)
- */
-const calculatePenalty = (matrix) =>
-  penaltyRule1(matrix) +
-  penaltyRule2(matrix) +
-  penaltyRule3(matrix) +
-  penaltyRule4(matrix);
 // Rule 1: Adjacent modules in row/column with the same color
 const penaltyRule1 = (matrix) => {
   const size = matrix.size;
@@ -1102,6 +1167,15 @@ const penaltyRule4 = (matrix) => {
     Math.min(Math.abs(prevFive - 50) / 5, Math.abs(nextFive - 50) / 5) * 10
   );
 };
+
+/**
+ * Calculates penalty score for a masked matrix (ISO 18004 Section 8.8)
+ */
+const calculatePenalty = (matrix) =>
+  penaltyRule1(matrix) +
+  penaltyRule2(matrix) +
+  penaltyRule3(matrix) +
+  penaltyRule4(matrix);
 
 /**
  * Finds the best mask pattern by trying all 8 and selecting the lowest penalty
@@ -1266,22 +1340,21 @@ const setupPatterns = (matrix, version) => {
 };
 
 
-export {
-  setupPatterns,
-  placeFinderPattern,
-  placeAlignmentPattern,
-  placeTimingPatterns,
-  reserveInfoAreas,
-  fillRect,
-};
+export { setupPatterns };
 
 // matrix/QrMatrix.js
 
+/**
+ * Represents a QR Code matrix (grid of modules).
+ */
 class QrMatrix {
   #data;
   #reserved;
   #size;
 
+  /**
+   * @param {number} size - Matrix width/height.
+   */
   constructor(size) {
     this.#size = size;
     this.#data = new Uint8Array(size * size);
@@ -1299,10 +1372,25 @@ class QrMatrix {
     return y * this.#size + x;
   }
 
+  /**
+   * Gets the module value at (x, y).
+   * @param {number} x
+   * @param {number} y
+   * @returns {number} 1 (dark) or 0 (light).
+   */
   get(x, y) {
     return this.#data[this.#index(x, y)];
   }
 
+  /**
+   * Sets the module value.
+   * @param {number} x
+   * @param {number} y
+   * @param {number} value
+   * @param {boolean} [reserved=false] -
+   *   Whether this module is reserved (cannot be masked/overwritten).
+   * @returns {boolean} True if set successfully, false if previously reserved.
+   */
   set(x, y, value, reserved = false) {
     const idx = this.#index(x, y);
     if (this.#reserved[idx] && !reserved) return false;
@@ -1311,15 +1399,30 @@ class QrMatrix {
     return true;
   }
 
+  /**
+   * Checks if the module is reserved.
+   * @param {number} x
+   * @param {number} y
+   * @returns {boolean}
+   */
   isReserved(x, y) {
     return this.#reserved[this.#index(x, y)] === 1;
   }
 
+  /**
+   * Toggles the value of the module (0 -> 1, 1 -> 0).
+   * @param {number} x
+   * @param {number} y
+   */
   toggle(x, y) {
     const idx = this.#index(x, y);
     this.#data[idx] ^= 1;
   }
 
+  /**
+   * Creates a deep copy of the matrix.
+   * @returns {QrMatrix}
+   */
   clone() {
     const copy = new QrMatrix(this.#size);
     for (let y = 0; y < this.#size; y++) {
@@ -1338,7 +1441,11 @@ export { QrMatrix };
 // matrix/render.js
 
 /**
- * Renders matrix to SVG string
+ * Renders matrix to SVG string.
+ * @param {QrMatrix} matrix
+ * @param {number} [moduleSize=10]
+ * @param {number} [quietZone=4]
+ * @returns {string} SVG content.
  */
 const toSvg = (matrix, moduleSize = 10, quietZone = 4) => {
   const qz = quietZone * moduleSize;
@@ -1368,7 +1475,9 @@ const toSvg = (matrix, moduleSize = 10, quietZone = 4) => {
 };
 
 /**
- * Renders matrix to string (console output)
+ * Renders matrix to string (console output).
+ * @param {QrMatrix} matrix
+ * @returns {string}
  */
 const toString = (matrix) => {
   let result = '';
@@ -1382,7 +1491,14 @@ const toString = (matrix) => {
 };
 
 /**
- * Draws the QR matrix to a generic Canvas context
+ * Draws the QR matrix to a generic Canvas context.
+ * @param {QrMatrix} matrix
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {Object} [options]
+ * @param {number} [options.cellSize=10]
+ * @param {number} [options.margin=4]
+ * @param {string} [options.colorDark='#000000']
+ * @param {string} [options.colorLight='#ffffff']
  */
 const drawToCanvas = (matrix, ctx, options = {}) => {
   const {
@@ -1452,11 +1568,19 @@ export { createQrMatrix };
 
 // BitBuffer.js
 
+/**
+ * Buffer for bit-level manipulations.
+ */
 class BitBuffer {
   constructor() {
     this.bits = [];
   }
 
+  /**
+   * Appends bits to the buffer.
+   * @param {number} value - The value to append.
+   * @param {number} length - The number of bits to use.
+   */
   append(value, length) {
     if (value === undefined) {
       throw new Error('Value is required');
@@ -1471,10 +1595,18 @@ class BitBuffer {
     }
   }
 
+  /**
+   * Returns the length of the buffer in bits.
+   * @returns {number}
+   */
   length() {
     return this.bits.length;
   }
 
+  /**
+   * Converts the bit buffer to a Uint8Array.
+   * @returns {Uint8Array}
+   */
   toUint8Array() {
     const bufferLength = this.length();
     const bytesCount = Math.ceil(bufferLength / 8);
@@ -1496,6 +1628,9 @@ export { BitBuffer };
 
 const ALPHANUMERICCHARSET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
 
+/**
+ * Encodes text data into a sequence of bits for QR Code.
+ */
 class QrEncoder {
   #text = '';
   #eccLevel = 0;
@@ -1503,6 +1638,13 @@ class QrEncoder {
   #utf8Data = new Uint8Array();
   #mode = null;
 
+  /**
+   * @param {Object} config
+   * @param {string} config.text - Text to encode.
+   * @param {number} config.eccLevel - Error correction level identifier.
+   * @param {number} [config.version] - Explicit version or auto-detected.
+   * @param {number} [config.mode] - Explicit mode or auto-detected.
+   */
   constructor({ text, eccLevel, version, mode }) {
     this.#text = text;
     this.#eccLevel = eccLevel;
@@ -1519,17 +1661,21 @@ class QrEncoder {
     return this.#mode || this.#getMode();
   }
 
+  /**
+   * Performs encoding.
+   * @returns {Array<number>} An array of bits.
+   */
   encode() {
     const dataBytes = this.#prepareDataBytes();
     const blockInfo = getBlockInfo(this.#version, this.#eccLevel);
 
-    const { dataBlocks, eccBlocks } = this.#splitIntoBlocks(
+    const { dataBlocks, eccBlocks } = QrEncoder.#splitIntoBlocks(
       dataBytes,
       blockInfo,
     );
 
-    const interleavedData = this.#interleaveBlocks(dataBlocks);
-    const interleavedEcc = this.#interleaveBlocks(eccBlocks);
+    const interleavedData = QrEncoder.#interleaveBlocks(dataBlocks);
+    const interleavedEcc = QrEncoder.#interleaveBlocks(eccBlocks);
 
     const bitBuffer = new BitBuffer();
 
@@ -1557,7 +1703,7 @@ class QrEncoder {
     return MODES.BYTE;
   }
 
-  #splitIntoBlocks(dataBytes, blockInfo) {
+  static #splitIntoBlocks(dataBytes, blockInfo) {
     const dataBlocks = [];
     const eccBlocks = [];
     let dataIndex = 0;
@@ -1580,7 +1726,7 @@ class QrEncoder {
     return { dataBlocks, eccBlocks };
   }
 
-  #interleaveBlocks(blocks) {
+  static #interleaveBlocks(blocks) {
     const result = [];
     const maxLength = Math.max(...blocks.map((b) => b.length));
 
@@ -1640,7 +1786,7 @@ class QrEncoder {
     return bitBuffer.toUint8Array();
   }
 
-  #getAlphanumericValue(char) {
+  static #getAlphanumericValue(char) {
     const idx = ALPHANUMERICCHARSET.indexOf(char);
     if (idx === -1) {
       throw new Error(`Character "${char}" is not valid in ALPHANUMERIC mode`);
@@ -1725,13 +1871,13 @@ class QrEncoder {
       const remaining = text.length - i;
 
       if (remaining >= 2) {
-        const v1 = this.#getAlphanumericValue(text[i]);
-        const v2 = this.#getAlphanumericValue(text[i + 1]);
+        const v1 = QrEncoder.#getAlphanumericValue(text[i]);
+        const v2 = QrEncoder.#getAlphanumericValue(text[i + 1]);
         const value = v1 * 45 + v2;
         bitBuffer.append(value, 11);
         i += 2;
       } else {
-        const v = this.#getAlphanumericValue(text[i]);
+        const v = QrEncoder.#getAlphanumericValue(text[i]);
         bitBuffer.append(v, 6);
         i += 1;
       }
@@ -1765,7 +1911,7 @@ class QrEncoder {
       }
     }
 
-    throw new Error('Data is too large for any QR Code version');
+    throw new TypeError('Data is too large for any QR Code version');
   }
 }
 
@@ -1773,10 +1919,26 @@ export { QrEncoder };
 
 // galois.js
 
+/**
+ * Galois Field GF(2^8) Arithmetic
+ *
+ * This module implements arithmetic operations over a finite field of
+ * 256 elements.
+ * It is the mathematical foundation for Reed-Solomon error correction
+ * used in QR Codes.
+ *
+ * The specific field is defined by the primitive polynomial:
+ * x^8 + x^4 + x^3 + x^2 + 1 (0x11D in binary).
+ *
+ * To optimize performance, multiplication is implemented using lookup
+ * tables (Log/Anti-Log),
+ * transforming complex polynomial multiplication into simple integer addition:
+ * a * b = antiLog(log(a) + log(b))
+ */
+
 const EXP = new Uint8Array(512);
 const LOG = new Uint8Array(256);
 
-// Initialize Galois field tables (GF(2^8) with polynomial 0x11D)
 let x = 1;
 for (let i = 0; i < 255; i++) {
   EXP[i] = x;
@@ -1784,15 +1946,21 @@ for (let i = 0; i < 255; i++) {
 
   x <<= 1;
   if (x & 0x100) {
-    // If the 9th bit is set (overflow beyond 255)
     x ^= 0x11d;
   }
 }
 
-// Duplicate the EXP table to simplify multiplication (to avoid doing % 255)
 for (let i = 255; i < 512; i++) {
   EXP[i] = EXP[i - 255];
 }
+
+/**
+ * Multiplies two numbers in GF(2^8).
+ *
+ * @param {number} a - First number (0-255).
+ * @param {number} b - Second number (0-255).
+ * @returns {number} The product in the Galois Field.
+ */
 
 const mul = (a, b) => {
   if (a === 0 || b === 0) return 0;
@@ -1806,6 +1974,68 @@ export {
 };
 
 // reedsolomon.js
+
+// Cache to store already calculated generator polynomials
+// to avoid recalculating them for every QR code with the same parameters.
+const POLY_CACHE = {};
+
+/**
+ * Multiplies two polynomials in Galois Field GF(2^8).
+ * Uses coefficient convolution with field
+ * arithmetic (XOR for addition, mul for multiplication).
+ *
+ * @param {Uint8Array} p1 - First polynomial.
+ * @param {Uint8Array} p2 - Second polynomial.
+ * @returns {Uint8Array} Result of polynomial multiplication.
+ */
+
+const polyMul = (p1, p2) => {
+  const len = p1.length + p2.length - 1;
+  const res = new Uint8Array(len);
+
+  for (let i = 0; i < p1.length; i++) {
+    for (let j = 0; j < p2.length; j++) {
+      res[i + j] ^= mul(p1[i], p2[j]);
+    }
+  }
+  return res;
+};
+
+/**
+ * Generates a generator polynomial for a given number of correction symbols.
+ * Mathematically this is the product:
+ * (x - a^0) * (x - a^1) * ... * (x - a^(n-1))
+ *
+ * @param {number} nsym - Number of correction symbols (polynomial degree).
+ * @returns {Uint8Array} Coefficients of the generator polynomial.
+ */
+
+const generatorPoly = (nsym) => {
+  if (POLY_CACHE[nsym]) return POLY_CACHE[nsym];
+
+  let poly = new Uint8Array([1]);
+
+  for (let i = 0; i < nsym; i++) {
+    // Multiply current polynomial by (x - 2^i)
+    // in galois field, (x - a) is the same as (x ^= a), [1, EXP[i]]
+    poly = polyMul(poly, new Uint8Array([1, EXP[i]]));
+  }
+
+  POLY_CACHE[nsym] = poly;
+  return poly;
+};
+
+/**
+ * Calculates Reed-Solomon Error Correction Codes (ECC).
+ * This function performs polynomial division of the data
+ * polynomial by the generator polynomial.
+ * The result is the remainder of the division,
+ * which becomes the error correction codes.
+ *
+ * @param {Uint8Array|Array<number>} data - Input data bytes (message).
+ * @param {number} nsym - Number of correction bytes (symbols) required.
+ * @returns {Uint8Array} Array of error correction bytes (remainder).
+ */
 
 const calculateECC = (data, nsym) => {
   const generator = generatorPoly(nsym);
@@ -1825,40 +2055,25 @@ const calculateECC = (data, nsym) => {
   return result.slice(data.length);
 };
 
-const POLY_CACHE = {};
-
-const generatorPoly = (nsym) => {
-  if (POLY_CACHE[nsym]) return POLY_CACHE[nsym];
-
-  let poly = new Uint8Array([1]);
-
-  for (let i = 0; i < nsym; i++) {
-    poly = polyMul(poly, new Uint8Array([1, EXP[i]]));
-  }
-
-  POLY_CACHE[nsym] = poly;
-  return poly;
-};
-
-const polyMul = (p1, p2) => {
-  const len = p1.length + p2.length - 1;
-  const res = new Uint8Array(len);
-
-  for (let i = 0; i < p1.length; i++) {
-    for (let j = 0; j < p2.length; j++) {
-      res[i + j] ^= mul(p1[i], p2[j]);
-    }
-  }
-  return res;
-};
-
 export { calculateECC };
 
 // index.js
 
 /**
- * Public API for QR Code generation
+ * Generates a QR Code from text.
+ * @param {string} text - The text to encode.
+ * @param {Object} [options] - Configuration options.
+ * @param {string} [options.ecc='M'] -
+ *   Error correction level ('L', 'M', 'Q', 'H').
+ * @param {number|'auto'} [options.version] - QR Code version (1-40) or 'auto'.
+ * @param {string|'auto'} [options.mode='auto'] -
+ *  Encoding mode ('numeric', 'alphanumeric', 'byte', 'auto').
+ * @param {number|'auto'} [options.maskPattern='auto'] -
+ *  Mask pattern (0-7) or 'auto'.
+ * @returns {Object}
+ *  The generated QR Code object containing matrix and render methods.
  */
+
 const encode = (text, options = {}) => {
   const config = {
     ecc: 'M',
@@ -1920,7 +2135,7 @@ const encode = (text, options = {}) => {
 
     toCanvas: (canvasElement, options = {}) => {
       if (typeof drawToCanvas !== 'function') {
-        throw new Error(
+        throw new TypeError(
           'Canvas rendering is not supported in this environment',
         );
       }
