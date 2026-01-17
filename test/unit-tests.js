@@ -10,14 +10,14 @@ const { setupPatterns } = require('../lib/matrix/patterns');
 const { fillData } = require('../lib/matrix/data');
 const { applyMask } = require('../lib/matrix/mask');
 const { encode } = require('../lib');
-const { ECC_LEVELS, MODES } = require('../lib/spec');
+const { MODES } = require('../lib/spec');
 const { getDataCapacity } = require('../lib/utils');
 
 describe('QrEncoder Internals', () => {
   it('prepareDataBytes should correctly encode mode, length and characters',
     () => {
       const text = 'Hi!';
-      const eccLevel = ECC_LEVELS.M;
+      const eccLevel = 'M';
       const encoder = new QrEncoder({ text, eccLevel, version: 1 });
 
       const bits = encoder.encode();
@@ -49,7 +49,7 @@ describe('QrEncoder Internals', () => {
 
   it('should add correct padding bytes (236, 17)', () => {
     const text = 'A';
-    const eccLevel = ECC_LEVELS.M;
+    const eccLevel = 'M';
     const encoder = new QrEncoder({ text, eccLevel, version: 1 });
     const bits = encoder.encode();
 
@@ -83,12 +83,12 @@ describe('QrEncoder Internals', () => {
     const text = 'Test';
     const encoderL = new QrEncoder({
       text,
-      eccLevel: ECC_LEVELS.L,
+      eccLevel: 'L',
       version: 1,
     });
     const encoderH = new QrEncoder({
       text,
-      eccLevel: ECC_LEVELS.H,
+      eccLevel: 'H',
       version: 1,
     });
 
