@@ -1,6 +1,6 @@
-'use strict';
-
 import { encode } from '../metaqr.mjs';
+
+'use strict';
 
 const form = document.querySelector('#form');
 const input = document.querySelector('#text-input');

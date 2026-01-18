@@ -4,63 +4,129 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert');
 
 const { QrEncoder } = require('../lib/QrEncoder');
+const { BitBuffer } = require('../lib/BitBuffer');
 const { calculateECC } = require('../lib/reedsolomon');
 const { QrMatrix } = require('../lib/matrix/QrMatrix');
 const { setupPatterns } = require('../lib/matrix/patterns');
 const { fillData } = require('../lib/matrix/data');
 const { applyMask } = require('../lib/matrix/mask');
 const { encode } = require('../lib');
-const { MODES } = require('../lib/spec');
+const { MODE_INDICATORS } = require('../lib/spec');
 const { getDataCapacity } = require('../lib/utils');
 
-describe('QrEncoder Internals', () => {
-  it('prepareDataBytes should correctly encode mode, length and characters',
-    () => {
-      const text = 'Hi!';
-      const eccLevel = 'M';
-      const encoder = new QrEncoder({ text, eccLevel, version: 1 });
+/**
+ * Helper to convert BitBuffer to array of bits for testing.
+ * @param {BitBuffer} bitBuffer
+ * @returns {number[]}
+ */
+const bitBufferToArray = (bitBuffer) => [...bitBuffer];
 
-      const bits = encoder.encode();
-
-      // Convert bits to bytes for inspection
-      const bytes = [];
-      for (let i = 0; i < Math.min(bits.length, 32); i += 8) {
-        let byte = 0;
-        for (let j = 0; j < 8 && i + j < bits.length; j++) {
-          byte = (byte << 1) | bits[i + j];
-        }
-        bytes.push(byte);
+/**
+ * Helper to convert BitBuffer to bytes array for testing.
+ * @param {BitBuffer} bitBuffer
+ * @returns {number[]}
+ */
+const bitBufferToBytes = (bitBuffer) => {
+  const bits = bitBufferToArray(bitBuffer);
+  const bytes = [];
+  for (let i = 0; i < bits.length; i += 8) {
+    let byte = 0;
+    for (let j = 0; j < 8 && i + j < bits.length; j++) {
+      byte = (byte << 1) | bits[i + j];
     }
+    bytes.push(byte);
+  }
+  return bytes;
+};
 
-      // First 4 bits: BYTE mode (0100 -> 4)
-      const modeBits = (bytes[0] >> 4) & 0x0f;
-      assert.strictEqual(modeBits, MODES.BYTE, 'Mode should be BYTE (4)');
+describe('BitBuffer', () => {
+  it('should append bits correctly', () => {
+    const buffer = new BitBuffer();
+    buffer.append(0b1010, 4);
+    buffer.append(0b1100, 4);
 
-      // Next 8 bits: Length (3)
-      const lengthBits = ((bytes[0] & 0x0f) << 4) | (bytes[1] >> 4);
-      assert.strictEqual(lengthBits, 3, 'Length should be 3');
+    assert.strictEqual(buffer.length(), 8);
+    assert.strictEqual(buffer.getBit(0), 1);
+    assert.strictEqual(buffer.getBit(1), 0);
+    assert.strictEqual(buffer.getBit(2), 1);
+    assert.strictEqual(buffer.getBit(3), 0);
+    assert.strictEqual(buffer.getBit(4), 1);
+    assert.strictEqual(buffer.getBit(5), 1);
+    assert.strictEqual(buffer.getBit(6), 0);
+    assert.strictEqual(buffer.getBit(7), 0);
+  });
 
-      // Data payload: 'H', 'i', '!'
-      const h = ((bytes[1] & 0x0f) << 4) | (bytes[2] >> 4);
-      const i = ((bytes[2] & 0x0f) << 4) | (bytes[3] >> 4);
-      assert.strictEqual(h, 72, 'First char is H');
-      assert.strictEqual(i, 105, 'Second char is i');
+  it('should return correct bytes via getBytes()', () => {
+    const buffer = new BitBuffer();
+    buffer.append(0b10101100, 8);
+    buffer.append(0b11110000, 8);
+
+    const bytes = buffer.getBytes();
+    assert.strictEqual(bytes.length, 2);
+    assert.strictEqual(bytes[0], 0b10101100);
+    assert.strictEqual(bytes[1], 0b11110000);
+  });
+
+  it('should be iterable', () => {
+    const buffer = new BitBuffer();
+    buffer.append(0b101, 3);
+
+    const bits = [...buffer];
+    assert.deepStrictEqual(bits, [1, 0, 1]);
+  });
+
+  it('should throw RangeError for out of bounds getBit()', () => {
+    const buffer = new BitBuffer();
+    buffer.append(0b1111, 4);
+
+    assert.throws(() => buffer.getBit(-1), RangeError);
+    assert.throws(() => buffer.getBit(4), RangeError);
+  });
+
+  it('should auto-extend capacity', () => {
+    const buffer = new BitBuffer(1); // Start with 1 byte capacity
+    // Append 100 bits (more than 8)
+    for (let i = 0; i < 100; i++) {
+      buffer.append(1, 1);
+    }
+    assert.strictEqual(buffer.length(), 100);
+  });
+});
+
+describe('QrEncoder Internals', () => {
+  it('prepareDataBytes should correctly encode mode, length and chars', () => {
+    const text = 'Hi!';
+    const eccLevel = 'M';
+    const encoder = new QrEncoder({ text, eccLevel, version: 1 });
+
+    const bitBuffer = encoder.encode();
+    const bytes = bitBufferToBytes(bitBuffer);
+
+    // First 4 bits: BYTE mode (0100 -> 4)
+    const modeBits = (bytes[0] >> 4) & 0x0f;
+    assert.strictEqual(
+      modeBits,
+      MODE_INDICATORS.BYTE,
+      'Mode should be BYTE (4)',
+    );
+
+    // Next 8 bits: Length (3)
+    const lengthBits = ((bytes[0] & 0x0f) << 4) | (bytes[1] >> 4);
+    assert.strictEqual(lengthBits, 3, 'Length should be 3');
+
+    // Data payload: 'H', 'i', '!'
+    const h = ((bytes[1] & 0x0f) << 4) | (bytes[2] >> 4);
+    const i = ((bytes[2] & 0x0f) << 4) | (bytes[3] >> 4);
+    assert.strictEqual(h, 72, 'First char is H');
+    assert.strictEqual(i, 105, 'Second char is i');
   });
 
   it('should add correct padding bytes (236, 17)', () => {
     const text = 'A';
     const eccLevel = 'M';
     const encoder = new QrEncoder({ text, eccLevel, version: 1 });
-    const bits = encoder.encode();
-
-    const bytes = [];
-    for (let i = 0; i < bits.length; i += 8) {
-      let byte = 0;
-      for (let j = 0; j < 8 && i + j < bits.length; j++) {
-        byte = (byte << 1) | bits[i + j];
-      }
-      bytes.push(byte);
-    }
+    const bitBuffer = encoder.encode();
+    const bytes = bitBufferToBytes(bitBuffer);
 
     const dataCapacity = getDataCapacity(1, eccLevel);
     // Version 1 (M) total codewords: 26
@@ -96,8 +162,8 @@ describe('QrEncoder Internals', () => {
     const bitsH = encoderH.encode();
 
     // Version 1 total bits = 208 (26 bytes * 8)
-    assert.strictEqual(bitsL.length, 208);
-    assert.strictEqual(bitsH.length, 208);
+    assert.strictEqual(bitsL.length(), 208);
+    assert.strictEqual(bitsH.length(), 208);
   });
 });
 
@@ -187,13 +253,18 @@ describe('Data Filling & Masking', () => {
     const matrix = new QrMatrix(size);
     setupPatterns(matrix, 1);
 
-    fillData(matrix, [1, 0, 1, 0, 1]); // partial fill
+    // Create a BitBuffer with partial fill
+    const bitBuffer = new BitBuffer();
+    bitBuffer.append(0b10101, 5);
+    fillData(matrix, bitBuffer);
 
     // Check if data was written (counting non-reserved filled spots)
     let filledCount = 0;
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
-        if (!matrix.isReserved(x, y) && matrix.get(x, y) === 1) filledCount++;
+        if (!matrix.isReserved(x, y) && matrix.get(x, y) === 1) {
+          filledCount++;
+        }
       }
     }
     assert.ok(filledCount > 0);
@@ -204,7 +275,12 @@ describe('Data Filling & Masking', () => {
     setupPatterns(matrix, 1);
     const originalFinder = matrix.get(3, 3);
 
-    fillData(matrix, new Array(500).fill(1)); // try to flood it
+    // Create a BitBuffer with lots of 1s
+    const bitBuffer = new BitBuffer();
+    for (let i = 0; i < 500; i++) {
+      bitBuffer.append(1, 1);
+    }
+    fillData(matrix, bitBuffer);
 
     assert.strictEqual(matrix.get(3, 3), originalFinder);
     assert.ok(matrix.isReserved(3, 3));
@@ -213,7 +289,13 @@ describe('Data Filling & Masking', () => {
   it('applyMask should not modify reserved areas', () => {
     const matrix = new QrMatrix(21);
     setupPatterns(matrix, 1);
-    fillData(matrix, new Array(200).fill(0));
+
+    // Create a BitBuffer with zeros
+    const bitBuffer = new BitBuffer();
+    for (let i = 0; i < 200; i++) {
+      bitBuffer.append(0, 1);
+    }
+    fillData(matrix, bitBuffer);
 
     const reservedVal = matrix.get(3, 3);
     applyMask(matrix, 0); // Apply mask 0
@@ -227,9 +309,15 @@ describe('Data Filling & Masking', () => {
     setupPatterns(m1, 1);
     setupPatterns(m2, 1);
 
-    const data = new Array(200).fill(1);
-    fillData(m1, data);
-    fillData(m2, data);
+    // Create BitBuffers with 1s
+    const bitBuffer1 = new BitBuffer();
+    const bitBuffer2 = new BitBuffer();
+    for (let i = 0; i < 200; i++) {
+      bitBuffer1.append(1, 1);
+      bitBuffer2.append(1, 1);
+    }
+    fillData(m1, bitBuffer1);
+    fillData(m2, bitBuffer2);
 
     applyMask(m1, 0);
     applyMask(m2, 1);
