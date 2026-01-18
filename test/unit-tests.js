@@ -14,31 +14,6 @@ const { encode } = require('../lib');
 const { MODE_INDICATORS } = require('../lib/spec');
 const { getDataCapacity } = require('../lib/utils');
 
-/**
- * Helper to convert BitBuffer to array of bits for testing.
- * @param {BitBuffer} bitBuffer
- * @returns {number[]}
- */
-const bitBufferToArray = (bitBuffer) => [...bitBuffer];
-
-/**
- * Helper to convert BitBuffer to bytes array for testing.
- * @param {BitBuffer} bitBuffer
- * @returns {number[]}
- */
-const bitBufferToBytes = (bitBuffer) => {
-  const bits = bitBufferToArray(bitBuffer);
-  const bytes = [];
-  for (let i = 0; i < bits.length; i += 8) {
-    let byte = 0;
-    for (let j = 0; j < 8 && i + j < bits.length; j++) {
-      byte = (byte << 1) | bits[i + j];
-    }
-    bytes.push(byte);
-  }
-  return bytes;
-};
-
 describe('BitBuffer', () => {
   it('should append bits correctly', () => {
     const buffer = new BitBuffer();
@@ -100,7 +75,7 @@ describe('QrEncoder Internals', () => {
     const encoder = new QrEncoder({ text, eccLevel, version: 1 });
 
     const bitBuffer = encoder.encode();
-    const bytes = bitBufferToBytes(bitBuffer);
+    const bytes = bitBuffer.getBytes();
 
     // First 4 bits: BYTE mode (0100 -> 4)
     const modeBits = (bytes[0] >> 4) & 0x0f;
@@ -126,7 +101,7 @@ describe('QrEncoder Internals', () => {
     const eccLevel = 'M';
     const encoder = new QrEncoder({ text, eccLevel, version: 1 });
     const bitBuffer = encoder.encode();
-    const bytes = bitBufferToBytes(bitBuffer);
+    const bytes = bitBuffer.getBytes();
 
     const dataCapacity = getDataCapacity(1, eccLevel);
     // Version 1 (M) total codewords: 26
@@ -256,7 +231,7 @@ describe('Data Filling & Masking', () => {
     // Create a BitBuffer with partial fill
     const bitBuffer = new BitBuffer();
     bitBuffer.append(0b10101, 5);
-    fillData(matrix, bitBuffer);
+    fillData(matrix, [...bitBuffer]);
 
     // Check if data was written (counting non-reserved filled spots)
     let filledCount = 0;
@@ -280,7 +255,7 @@ describe('Data Filling & Masking', () => {
     for (let i = 0; i < 500; i++) {
       bitBuffer.append(1, 1);
     }
-    fillData(matrix, bitBuffer);
+    fillData(matrix, [...bitBuffer]);
 
     assert.strictEqual(matrix.get(3, 3), originalFinder);
     assert.ok(matrix.isReserved(3, 3));
@@ -295,7 +270,7 @@ describe('Data Filling & Masking', () => {
     for (let i = 0; i < 200; i++) {
       bitBuffer.append(0, 1);
     }
-    fillData(matrix, bitBuffer);
+    fillData(matrix, [...bitBuffer]);
 
     const reservedVal = matrix.get(3, 3);
     applyMask(matrix, 0); // Apply mask 0
@@ -316,8 +291,8 @@ describe('Data Filling & Masking', () => {
       bitBuffer1.append(1, 1);
       bitBuffer2.append(1, 1);
     }
-    fillData(m1, bitBuffer1);
-    fillData(m2, bitBuffer2);
+    fillData(m1, [...bitBuffer1]);
+    fillData(m2, [...bitBuffer2]);
 
     applyMask(m1, 0);
     applyMask(m2, 1);
