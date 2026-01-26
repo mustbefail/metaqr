@@ -1,7 +1,5 @@
 import { encode } from '../metaqr.mjs';
 
-'use strict';
-
 const form = document.querySelector('#form');
 const input = document.querySelector('#text-input');
 const eccSelect = document.querySelector('#ecc-select');
