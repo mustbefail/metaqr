@@ -77,7 +77,7 @@ export interface EncodedQr {
   version: number;
   eccLevel: EccLevel;
   maskPattern: number | 'auto';
-  mode: ModeIndicator;
+  mode: ModeIndicator | null;
   toSvg(options?: ToSvgOptions): string;
   toCanvas(canvasElement: HTMLCanvasElement, options?: ToCanvasOptions): void;
   toString(): string;

@@ -13,6 +13,7 @@
     "type": "git",
     "url": "git+https://github.com/metarhia/metaqr.git"
   },
+  "files": ["lib", "types.d.ts", "main.js", "metaqr.mjs", "LICENSE", "README.md"],
   "license": "MIT",
   "author": "Viktor Kushnir <mustbefail@gmail.com>",
   "type": "commonjs",
@@ -20,7 +21,7 @@
   "main": "main.js",
   "exports": {
     ".": {
-      "import": "./main.mjs",
+      "import": "./metaqr.mjs",
       "require": "./main.js"
     }
   },
@@ -30,12 +31,13 @@
     "prettier": "prettier --write .",
     "build": "metarhia-build"
   },
-  "dependencies": {
-    "@types/node": "^25.0.3",
-    "eslint": "^9.39.2",
-    "eslint-config-metarhia": "^9.1.5",
+  "dependencies": {},
+  "devDependencies": {
     "metarhia-build": "^0.0.0",
+    "eslint-config-metarhia": "^9.1.5",
+    "@types/node": "^25.0.3",
     "prettier": "^3.7.4",
+    "eslint": "^9.39.2",
     "typescript": "^5.9.3"
   }
 }
