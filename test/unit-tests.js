@@ -150,7 +150,6 @@ describe('QrEncoder Internals', () => {
       'Should detect NUMERIC mode',
     );
 
-    console.log({nMode: numeric.mode, expected: MODE_INDICATORS.NUMERIC});
 
     // Alphanumeric (A-Z, 0-9, space, $%*+-./:)
     const alphanumeric = new QrEncoder({
@@ -164,9 +163,7 @@ describe('QrEncoder Internals', () => {
     );
 
     // Byte (lowercase, symbols not in Alphanumeric set)
-    const byte = new QrEncoder(
-      { text: 'Hello World!', eccLevel: 'M' }
-    );
+    const byte = new QrEncoder({ text: 'Hello World!', eccLevel: 'M' });
     assert.strictEqual(
       byte.mode,
       MODE_INDICATORS.BYTE,

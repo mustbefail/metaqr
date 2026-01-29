@@ -13,7 +13,14 @@
     "type": "git",
     "url": "git+https://github.com/metarhia/metaqr.git"
   },
-  "files": ["lib", "types.d.ts", "main.js", "metaqr.mjs", "LICENSE", "README.md"],
+  "files": [
+    "lib",
+    "types.d.ts",
+    "main.js",
+    "metaqr.mjs",
+    "LICENSE",
+    "README.md"
+  ],
   "license": "MIT",
   "author": "Viktor Kushnir <mustbefail@gmail.com>",
   "type": "commonjs",
