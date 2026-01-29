@@ -140,6 +140,39 @@ describe('QrEncoder Internals', () => {
     assert.strictEqual(bitsL.length(), 208);
     assert.strictEqual(bitsH.length(), 208);
   });
+
+  it('should correctly select mode based on content', () => {
+    // Numeric
+    const numeric = new QrEncoder({ text: '0123456789', eccLevel: 'M' });
+    assert.strictEqual(
+      numeric.mode,
+      MODE_INDICATORS.NUMERIC,
+      'Should detect NUMERIC mode',
+    );
+
+    console.log({nMode: numeric.mode, expected: MODE_INDICATORS.NUMERIC});
+
+    // Alphanumeric (A-Z, 0-9, space, $%*+-./:)
+    const alphanumeric = new QrEncoder({
+      text: 'HELLO WORLD 123 $%*+-./:',
+      eccLevel: 'M',
+    });
+    assert.strictEqual(
+      alphanumeric.mode,
+      MODE_INDICATORS.ALPHANUMERIC,
+      'Should detect ALPHANUMERIC mode',
+    );
+
+    // Byte (lowercase, symbols not in Alphanumeric set)
+    const byte = new QrEncoder(
+      { text: 'Hello World!', eccLevel: 'M' }
+    );
+    assert.strictEqual(
+      byte.mode,
+      MODE_INDICATORS.BYTE,
+      'Should detect BYTE mode for lowercase/extended chars',
+    );
+  });
 });
 
 describe('Reed-Solomon ECC', () => {
