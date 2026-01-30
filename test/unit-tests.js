@@ -150,7 +150,6 @@ describe('QrEncoder Internals', () => {
       'Should detect NUMERIC mode',
     );
 
-
     // Alphanumeric (A-Z, 0-9, space, $%*+-./:)
     const alphanumeric = new QrEncoder({
       text: 'HELLO WORLD 123 $%*+-./:',
