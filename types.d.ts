@@ -63,7 +63,7 @@ export interface ToCanvasOptions {
   colorLight?: string;
 }
 
-export interface QrMatrix {
+export class QrMatrix {
   readonly size: number;
   get(x: number, y: number): Bit;
   set(x: number, y: number, value: number, reserved?: boolean): boolean;
@@ -108,10 +108,58 @@ export interface QrEncoderConfig {
 
 export class QrEncoder {
   constructor(config: QrEncoderConfig);
-
   readonly version: number;
-
   readonly mode: ModeIndicator;
-
   encode(): BitBuffer;
+}
+
+export interface ModeEncoder {
+  readonly mode: ModeIndicator;
+  readonly charCount: number;
+  readonly content: string;
+  readonly dataBitsLength: number;
+  encode(): BitBuffer;
+}
+
+export class Numeric implements ModeEncoder {
+  constructor(content: string);
+  readonly mode: ModeIndicator;
+  readonly charCount: number;
+  readonly content: string;
+  readonly dataBitsLength: number;
+  encode(): BitBuffer;
+}
+
+export class Alphanumeric implements ModeEncoder {
+  constructor(content: string);
+  readonly mode: ModeIndicator;
+  readonly content: string;
+  readonly charCount: number;
+  readonly dataBitsLength: number;
+  encode(): BitBuffer;
+}
+
+export class Byte implements ModeEncoder {
+  constructor(content: string);
+  readonly mode: ModeIndicator;
+  readonly content: string;
+  readonly charCount: number;
+  readonly dataBitsLength: number;
+  encode(): BitBuffer;
+}
+
+export class Segmenter {
+  static segment(text: string, mode?: ModeIndicator | null): ModeEncoder[];
+}
+
+export class Encoded {
+  constructor(
+    matrix: QrMatrix,
+    version: number,
+    eccLevel: EccLevel,
+    maskPattern: number | 'auto',
+  );
+  toSvg(options?: ToSvgOptions): string;
+  toCanvas(canvasElement: HTMLCanvasElement, options?: ToCanvasOptions): void;
+  toString(): string;
 }

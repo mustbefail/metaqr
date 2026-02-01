@@ -18,7 +18,7 @@ const errorContainer = document.querySelector('#error-text');
 const generateQR = () => {
   const text = input.value;
   const ecc = eccSelect.value;
-  const mode = modeSelect.value;
+  const mode = modeSelect.value === 'auto' ? null : modeSelect.value;
 
   if (!text) return;
 
@@ -41,7 +41,7 @@ const generateQR = () => {
     const size = qr.matrix.size;
     infoSize.textContent = `${size}x${size}`;
 
-    infoMode.textContent = mode === 'auto' ? '(auto)' : mode;
+    infoMode.textContent = mode === null ? '(auto)' : mode;
 
     resultArea.classList.add('active');
   } catch (error) {
