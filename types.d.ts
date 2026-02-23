@@ -76,8 +76,8 @@ export interface EncodedQr {
   matrix: QrMatrix;
   version: number;
   eccLevel: EccLevel;
-  maskPattern: number | 'auto';
-  mode: ModeIndicator | null;
+  maskPattern: number;
+  mode: ModeIndicator | 'mixed';
   toSvg(options?: ToSvgOptions): string;
   toCanvas(canvasElement: HTMLCanvasElement, options?: ToCanvasOptions): void;
   toString(): string;
@@ -88,9 +88,11 @@ export function encode(text: string, options?: EncodeOptions): EncodedQr;
 export class BitBuffer implements Iterable<Bit> {
   constructor(initialBytes?: number);
 
-  length(): number;
+  readonly length: number;
 
   append(value: number, length: number): void;
+
+  concat(buffer: BitBuffer): this;
 
   getBit(index: number): Bit;
 
@@ -100,17 +102,15 @@ export class BitBuffer implements Iterable<Bit> {
 }
 
 export interface QrEncoderConfig {
-  text: string;
   eccLevel: EccLevel;
   version?: number;
-  mode?: ModeIndicator | null;
+  maskPattern?: number | 'auto';
 }
 
 export class QrEncoder {
   constructor(config: QrEncoderConfig);
   readonly version: number;
-  readonly mode: ModeIndicator;
-  encode(): BitBuffer;
+  encode(...segments: ModeEncoder[]): Encoded;
 }
 
 export interface ModeEncoder {
@@ -153,12 +153,18 @@ export class Segmenter {
 }
 
 export class Encoded {
-  constructor(
-    matrix: QrMatrix,
-    version: number,
-    eccLevel: EccLevel,
-    maskPattern: number | 'auto',
-  );
+  constructor(config: {
+    bits: Bit[];
+    version: number;
+    eccLevel: EccLevel;
+    maskPattern?: number | 'auto';
+    mode?: ModeIndicator | null;
+  });
+  readonly matrix: QrMatrix;
+  readonly version: number;
+  readonly eccLevel: EccLevel;
+  readonly maskPattern: number;
+  readonly mode: ModeIndicator | 'mixed';
   toSvg(options?: ToSvgOptions): string;
   toCanvas(canvasElement: HTMLCanvasElement, options?: ToCanvasOptions): void;
   toString(): string;

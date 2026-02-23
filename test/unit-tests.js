@@ -39,6 +39,37 @@ describe('BitBuffer', () => {
     assert.strictEqual(bytes[0], 0b10101100);
     assert.strictEqual(bytes[1], 0b11110000);
   });
+
+  it('should concat non-aligned buffers bit by bit', () => {
+    const a = new BitBuffer();
+    a.append(0b1010, 4);
+
+    const b = new BitBuffer();
+    b.append(0b1100, 4);
+
+    a.concat(b);
+
+    assert.strictEqual(a.length, 8);
+    assert.strictEqual(a.getBit(4), 1);
+    assert.strictEqual(a.getBit(5), 1);
+    assert.strictEqual(a.getBit(6), 0);
+    assert.strictEqual(a.getBit(7), 0);
+  });
+
+  it('should concat byte-aligned buffers via fast path', () => {
+    const a = new BitBuffer();
+    a.append(0b10101010, 8);
+
+    const b = new BitBuffer();
+    b.append(0b11001100, 8);
+
+    a.concat(b);
+
+    assert.strictEqual(a.length, 16);
+    const bytes = a.getBytes();
+    assert.strictEqual(bytes[0], 0b10101010);
+    assert.strictEqual(bytes[1], 0b11001100);
+  });
 });
 
 describe('Encoders (Modes)', () => {
@@ -242,5 +273,38 @@ describe('End-to-End Public API', () => {
     assert.strictEqual(result.eccLevel, 'H');
     assert.strictEqual(result.version, 2);
     assert.strictEqual(result.matrix.size, 25); // V2 size
+  });
+
+  it('should throw on unknown mode option', () => {
+    assert.throws(
+      () => encode('test', { mode: 'invalid' }),
+      /Invalid mode/,
+    );
+  });
+
+  it('should use smaller version with auto mode than forced byte', () => {
+    // 'PRICE: ' is Alphanumeric, '999999999' is Numeric
+    // auto fits version 1 (M), byte needs version 2 (M)
+    const auto = encode('PRICE: 999999999');
+    const byte = encode('PRICE: 999999999', { mode: 'byte' });
+
+    assert.strictEqual(auto.version, 1);
+    assert.strictEqual(auto.mode, 'mixed');
+    assert.strictEqual(byte.version, 2);
+  });
+
+  it('should encode lowercase URL as single byte segment', () => {
+    const result = encode('https://example.com');
+    assert.strictEqual(result.mode, MODE_INDICATORS.BYTE);
+  });
+
+  it('should encode uppercase URL with numeric path as mixed mode', () => {
+    // 'HTTPS://SHOP.COM/ITEM/' is Alphanumeric, '9876543' is Numeric
+    const auto = encode('HTTPS://SHOP.COM/ITEM/9876543');
+    const byte = encode('HTTPS://SHOP.COM/ITEM/9876543', { mode: 'byte' });
+
+    assert.strictEqual(auto.mode, 'mixed');
+    assert.strictEqual(auto.version, 2);
+    assert.strictEqual(byte.version, 3);
   });
 });
